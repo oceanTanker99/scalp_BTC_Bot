@@ -2,13 +2,20 @@ import pandas as pd
 import pandas_ta as ta
 import logging
 import datetime
+import csv
+import os
 from config.config import BOLLINGER_PERIOD, BOLLINGER_STD, RSI_PERIOD, RSI_OVERSOLD, RSI_OVERBOUGHT, TRADE_START_HOUR_UTC, TRADE_END_HOUR_UTC, ATR_PERIOD, ATR_MULTIPLIER, EMA_MTF_PERIOD, ADX_PERIOD, ADX_THRESHOLD
 
 log = logging.getLogger(__name__)
 
 class StrategyEngine:
     def __init__(self):
-        pass
+        self.log_file = "logs/analysis_report.csv"
+        os.makedirs("logs", exist_ok=True)
+        if not os.path.exists(self.log_file):
+            with open(self.log_file, mode='w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(["timestamp_utc", "price", "rsi", "bbl", "bbh", "vwap", "adx", "ema_200", "ofi", "signal", "sl_distance"])
 
     def analyze(self, df_1m: pd.DataFrame, df_5m: pd.DataFrame, df_15m: pd.DataFrame, ofi: float):
         """
@@ -93,5 +100,14 @@ class StrategyEngine:
         elif is_bearish and short_trigger and ofi_bearish:
             log.info(f"[SIGNAL] SHORT Triggered! Price: {price}, BBH: {bbh}, RSI: {rsi}, OFI: {ofi}, ADX: {current_adx}")
             signal = "SHORT"
+            
+        # Log to CSV
+        try:
+            with open(self.log_file, mode='a', newline='') as f:
+                writer = csv.writer(f)
+                ts = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                writer.writerow([ts, price, round(rsi,2), round(bbl,2), round(bbh,2), round(vwap,2), round(current_adx,2), round(current_ema_200,2), round(ofi,4), signal, round(sl_distance, 4)])
+        except Exception as e:
+            log.error(f"Error writing to analysis CSV: {e}")
             
         return signal, price, sl_distance
