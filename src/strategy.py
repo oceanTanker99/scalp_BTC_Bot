@@ -1,7 +1,8 @@
 import pandas as pd
 import pandas_ta as ta
 import logging
-from config.config import BOLLINGER_PERIOD, BOLLINGER_STD, RSI_PERIOD, RSI_OVERSOLD, RSI_OVERBOUGHT
+import datetime
+from config.config import BOLLINGER_PERIOD, BOLLINGER_STD, RSI_PERIOD, RSI_OVERSOLD, RSI_OVERBOUGHT, TRADE_START_HOUR_UTC, TRADE_END_HOUR_UTC
 
 log = logging.getLogger(__name__)
 
@@ -16,6 +17,10 @@ class StrategyEngine:
             signal (str): 'LONG', 'SHORT', or 'NEUTRAL'
             price (float): current price
         """
+        current_hour_utc = datetime.datetime.utcnow().hour
+        if current_hour_utc < TRADE_START_HOUR_UTC or current_hour_utc >= TRADE_END_HOUR_UTC:
+            return "NEUTRAL", 0.0
+
         if len(df_1m) < BOLLINGER_PERIOD or len(df_5m) < 10:
             return "NEUTRAL", 0.0
 
@@ -55,8 +60,8 @@ class StrategyEngine:
         short_trigger = (price >= bbh * 0.9995) and (rsi > RSI_OVERBOUGHT)
 
         # OFI Confirmation
-        ofi_bullish = ofi > 0.1 # More bids than asks
-        ofi_bearish = ofi < -0.1 # More asks than bids
+        ofi_bullish = ofi > 0.25 # More bids than asks
+        ofi_bearish = ofi < -0.25 # More asks than bids
 
         signal = "NEUTRAL"
         if is_bullish and long_trigger and ofi_bullish:
