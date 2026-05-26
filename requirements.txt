@@ -1,0 +1,9 @@
+python-telegram-bot==21.5
+ccxt==4.3.89
+pandas>=2.2,<3.0
+pandas-ta>=0.3.14b
+requests==2.32.3
+python-dotenv>=1.0,<2.0
+python-binance>=1.0.36
+sqlalchemy[asyncio]>=2.0
+aiosqlite>=0.20
