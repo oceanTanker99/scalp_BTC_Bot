@@ -36,18 +36,18 @@ class ScalpBot:
         while True:
             await asyncio.sleep(3600)
 
-    async def on_candle_close(self, df_1m, df_5m, ofi):
+    async def on_candle_close(self, df_1m, df_5m, df_15m, ofi):
         # We only look for entry if not currently in a position
         # For simplicity in this base version, we assume OCO closes the position.
         # Checking open positions is recommended for production.
         
         # In a real bot, we'd check self.client.futures_position_information()
         
-        signal, price = self.strategy.analyze(df_1m, df_5m, ofi)
+        signal, price, sl_distance = self.strategy.analyze(df_1m, df_5m, df_15m, ofi)
         
         if signal != 'NEUTRAL':
             log.info(f"Signal Generated: {signal} at {price}")
-            await self.trader.execute_trade(signal, price)
+            await self.trader.execute_trade(signal, price, sl_distance)
 
 if __name__ == "__main__":
     bot = ScalpBot()

@@ -14,6 +14,7 @@ class MarketStream:
         self.bsm = None
         self.klines_1m = []
         self.klines_5m = []
+        self.klines_15m = []
         self.orderbook = {"bids": [], "asks": []}
         self.callbacks = []
 
@@ -32,6 +33,7 @@ class MarketStream:
         # Start streams
         asyncio.create_task(self._kline_stream("1m"))
         asyncio.create_task(self._kline_stream("5m"))
+        asyncio.create_task(self._kline_stream("15m"))
         asyncio.create_task(self._depth_stream())
         
     async def _load_historical(self):
@@ -43,6 +45,10 @@ class MarketStream:
         # 5m data
         res_5m = await self.client.futures_klines(symbol=SYMBOL, interval="5m", limit=100)
         self.klines_5m = self._parse_klines(res_5m)
+
+        # 15m data
+        res_15m = await self.client.futures_klines(symbol=SYMBOL, interval="15m", limit=250)
+        self.klines_15m = self._parse_klines(res_15m)
 
     def _parse_klines(self, klines):
         # [timestamp, open, high, low, close, volume, ...]
@@ -84,7 +90,7 @@ class MarketStream:
                             self.klines_1m[-1] = formatted
                         else:
                             self.klines_1m.append(formatted)
-                else:
+                elif interval == "5m":
                     if kline['x']:
                         self.klines_5m.pop(0)
                         self.klines_5m.append(formatted)
@@ -93,6 +99,15 @@ class MarketStream:
                             self.klines_5m[-1] = formatted
                         else:
                             self.klines_5m.append(formatted)
+                elif interval == "15m":
+                    if kline['x']:
+                        self.klines_15m.pop(0)
+                        self.klines_15m.append(formatted)
+                    else:
+                        if self.klines_15m[-1]['timestamp'] == formatted['timestamp']:
+                            self.klines_15m[-1] = formatted
+                        else:
+                            self.klines_15m.append(formatted)
 
     async def _depth_stream(self):
         log.info("Starting depth stream for OFI...")
@@ -119,10 +134,11 @@ class MarketStream:
     def get_dataframes(self):
         df_1m = pd.DataFrame(self.klines_1m)
         df_5m = pd.DataFrame(self.klines_5m)
-        return df_1m, df_5m
+        df_15m = pd.DataFrame(self.klines_15m)
+        return df_1m, df_5m, df_15m
 
     async def _trigger_callbacks(self):
         ofi = self.get_ofi()
-        df_1m, df_5m = self.get_dataframes()
+        df_1m, df_5m, df_15m = self.get_dataframes()
         for cb in self.callbacks:
-            await cb(df_1m, df_5m, ofi)
+            await cb(df_1m, df_5m, df_15m, ofi)

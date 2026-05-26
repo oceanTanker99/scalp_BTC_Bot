@@ -43,7 +43,7 @@ class LiveTrader:
             return True
         return False
 
-    async def execute_trade(self, signal, current_price):
+    async def execute_trade(self, signal, current_price, sl_distance):
         if await self.check_kill_switch():
             return
             
@@ -51,8 +51,8 @@ class LiveTrader:
         # Risk 1% of balance
         risk_amount = balance * TRADE_RISK_PCT
         
-        # Stop loss percentage (e.g. 0.5% price movement)
-        sl_pct = 0.005 
+        # Dynamic Stop loss percentage based on ATR
+        sl_pct = sl_distance 
         
         # Calculate quantity based on risk
         # risk_amount = qty * current_price * sl_pct
