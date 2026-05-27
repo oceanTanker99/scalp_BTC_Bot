@@ -82,8 +82,6 @@ class MarketStream:
                     if kline['x']: # Candle closed
                         self.klines_1m.pop(0)
                         self.klines_1m.append(formatted)
-                        # Trigger strategy on 1m candle close
-                        await self._trigger_callbacks()
                     else:
                         # Update current unclosed candle
                         if self.klines_1m[-1]['timestamp'] == formatted['timestamp']:
@@ -94,6 +92,8 @@ class MarketStream:
                     if kline['x']:
                         self.klines_5m.pop(0)
                         self.klines_5m.append(formatted)
+                        # Trigger strategy on 5m candle close
+                        await self._trigger_callbacks()
                     else:
                         if self.klines_5m[-1]['timestamp'] == formatted['timestamp']:
                             self.klines_5m[-1] = formatted

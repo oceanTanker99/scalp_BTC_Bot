@@ -5,6 +5,7 @@ import sys
 from src.market_stream import MarketStream
 from src.strategy import StrategyEngine
 from src.live_trader import LiveTrader
+from src.ai_analyzer import DeepSeekValidator
 
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -23,13 +24,14 @@ class ScalpBot:
         self.stream = MarketStream()
         self.strategy = StrategyEngine()
         self.trader = LiveTrader()
+        self.ai = DeepSeekValidator()
+        self.stream.register_callback(self.on_candle_close)
         self.in_position = False
 
     async def start(self):
         log.info("Starting Scalp BTC Bot...")
         await self.trader.initialize()
         
-        self.stream.register_callback(self.on_candle_close)
         await self.stream.start()
         
         # Keep alive
@@ -46,8 +48,14 @@ class ScalpBot:
         signal, price, sl_distance = self.strategy.analyze(df_1m, df_5m, df_15m, ofi)
         
         if signal != 'NEUTRAL':
-            log.info(f"Signal Generated: {signal} at {price}")
-            await self.trader.execute_trade(signal, price, sl_distance)
+            log.info(f"Signal Awal: {signal} at {price}. Mengirim ke DeepSeek AI untuk validasi...")
+            is_approved = await self.ai.validate(signal, df_5m, ofi)
+            
+            if is_approved:
+                log.info(f"AI MENYETUJUI! Mengeksekusi order {signal}...")
+                await self.trader.execute_trade(signal, price, sl_distance)
+            else:
+                log.info("AI MENOLAK sinyal. Order dibatalkan untuk menghindari fakeout.")
 
 if __name__ == "__main__":
     bot = ScalpBot()
