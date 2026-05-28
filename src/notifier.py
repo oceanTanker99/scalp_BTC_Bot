@@ -49,6 +49,17 @@ class TelegramNotifier:
         )
         await self.send(msg)
 
+    async def notify_ghost_signal(self, signal: str, price: float, reasoning: str):
+        emoji = "👻"
+        msg = (
+            f"{emoji} <b>[GHOST SIGNAL] AI MENYETUJUI: {signal}</b>\n"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"⚠️ <i>Tidak dieksekusi karena ada posisi aktif</i>\n"
+            f"💰 Harga  : <code>{price:,.1f}</code> USDT\n"
+            f"🧠 Alasan : {reasoning[:200]}...\n"
+        )
+        await self.send(msg)
+
     async def notify_kill_switch(self, drawdown_pct: float, balance: float):
         msg = (
             f"🚨 <b>KILL SWITCH AKTIF!</b>\n"
@@ -61,6 +72,10 @@ class TelegramNotifier:
 
     async def notify_error(self, error_msg: str):
         msg = f"⚠️ <b>ERROR BOT</b>\n<code>{error_msg[:500]}</code>"
+        await self.send(msg)
+
+    async def notify_info(self, info_msg: str):
+        msg = f"ℹ️ <b>INFO BOT</b>\n{info_msg}"
         await self.send(msg)
 
     async def notify_startup(self, balance: float):

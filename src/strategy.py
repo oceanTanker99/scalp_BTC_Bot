@@ -84,9 +84,9 @@ class StrategyEngine:
         current = df_5m.iloc[-1]
         current_15m = df_15m.iloc[-1]
 
-        bbl_col = f'BBL_{BOLLINGER_PERIOD}_{float(BOLLINGER_STD)}'
-        bbh_col = f'BBU_{BOLLINGER_PERIOD}_{float(BOLLINGER_STD)}'
-        adx_col = f'ADX_{ADX_PERIOD}'
+        bbl_col = [col for col in df_5m.columns if col.startswith('BBL_')][0]
+        bbh_col = [col for col in df_5m.columns if col.startswith('BBU_')][0]
+        adx_col = [col for col in df_5m.columns if col.startswith('ADX_')][0]
 
         required_cols = [bbl_col, bbh_col, adx_col, 'rsi', 'atr', 'vwap', 'volume_ma']
         if any(col not in df_5m.columns or pd.isna(current.get(col, float('nan'))) for col in required_cols):

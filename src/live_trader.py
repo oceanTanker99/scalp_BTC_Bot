@@ -1,9 +1,11 @@
 import logging
+import asyncio
 from binance import AsyncClient
 from binance.exceptions import BinanceAPIException
 from config.config import (
     BINANCE_API_KEY, BINANCE_SECRET_KEY, BINANCE_TESTNET, SYMBOL,
-    TRADE_RISK_PCT, LEVERAGE, RRR_TP1, MAX_DAILY_DRAWDOWN_PCT
+    TRADE_RISK_PCT, LEVERAGE, RRR_TP1, MAX_DAILY_DRAWDOWN_PCT,
+    BREAK_EVEN_TRIGGER_PCT
 )
 
 log = logging.getLogger(__name__)
@@ -98,15 +100,32 @@ class LiveTrader:
             tp_price = round(current_price * (1 - (sl_pct * RRR_TP1)), 1)
 
         try:
-            log.info(f"Placing {side} Market Order | Qty: {qty} BTC | SL: {sl_price} | TP: {tp_price}")
+            log.info(f"Placing {side} LIMIT Order (Post-Only) | Qty: {qty} BTC | Price: {current_price}")
             
-            # --- Entry Order ---
-            await self.client.futures_create_order(
+            # --- Entry Limit Order (Post-Only) ---
+            entry_order = await self.client.futures_create_order(
                 symbol=SYMBOL,
                 side=side,
-                type='MARKET',
-                quantity=qty
+                type='LIMIT',
+                quantity=qty,
+                price=current_price,
+                timeInForce='GTX' # GTX = Post-Only
             )
+            order_id = entry_order['orderId']
+            
+            # --- Order Lifecycle Management ---
+            log.info(f"⏳ Menunggu 15 detik agar Limit Order (ID: {order_id}) terisi...")
+            await asyncio.sleep(15)
+            
+            # Cek status pesanan
+            order_status = await self.client.futures_get_order(symbol=SYMBOL, orderId=order_id)
+            
+            if order_status['status'] != 'FILLED':
+                log.warning(f"⚠️ Limit order belum terisi setelah 15 detik. Membatalkan pesanan (ID: {order_id})...")
+                await self.client.futures_cancel_order(symbol=SYMBOL, orderId=order_id)
+                return None, None, None
+                
+            log.info(f"✅ Limit Order terisi! Memasang perlindungan SL dan TP...")
             
             # --- Perbaikan Bug #3: Gunakan API standar, bukan private method ---
             # Stop Loss
@@ -129,7 +148,7 @@ class LiveTrader:
                 timeInForce='GTE_GTC'
             )
             
-            log.info(f"✅ Order berhasil! Entry: {current_price}, SL: {sl_price}, TP: {tp_price}")
+            log.info(f"✅ Trade Secured! Entry: {current_price}, SL: {sl_price}, TP: {tp_price}")
             return sl_price, tp_price, qty
             
         except BinanceAPIException as e:
@@ -138,3 +157,59 @@ class LiveTrader:
         except Exception as e:
             log.error(f"Error executing trade: {e}")
             return None, None, None
+
+    async def manage_trailing_stop(self):
+        """
+        Pindahkan Stop Loss ke Break Even jika posisi sudah untung 
+        lebih dari BREAK_EVEN_TRIGGER_PCT
+        """
+        try:
+            positions = await self.client.futures_position_information(symbol=SYMBOL)
+            active = [p for p in positions if float(p.get('positionAmt', 0)) != 0]
+            if not active:
+                return
+            
+            pos = active[0]
+            entry_price = float(pos['entryPrice'])
+            mark_price = float(pos['markPrice'])
+            qty = float(pos['positionAmt'])
+            direction = "LONG" if qty > 0 else "SHORT"
+            
+            if direction == "LONG":
+                pnl_pct = (mark_price - entry_price) / entry_price
+            else:
+                pnl_pct = (entry_price - mark_price) / entry_price
+                
+            if pnl_pct >= BREAK_EVEN_TRIGGER_PCT:
+                orders = await self.client.futures_get_open_orders(symbol=SYMBOL)
+                sl_orders = [o for o in orders if o['type'] == 'STOP_MARKET']
+                if not sl_orders:
+                    return
+                
+                sl_order = sl_orders[0]
+                current_sl = float(sl_order['stopPrice'])
+                
+                needs_move = False
+                if direction == "LONG" and current_sl < entry_price:
+                    needs_move = True
+                elif direction == "SHORT" and current_sl > entry_price:
+                    needs_move = True
+                    
+                if needs_move:
+                    log.info(f"Menggeser SL ke Break Even ({entry_price})...")
+                    await self.client.futures_cancel_order(symbol=SYMBOL, orderId=sl_order['orderId'])
+                    side = "SELL" if direction == "LONG" else "BUY"
+                    await self.client.futures_create_order(
+                        symbol=SYMBOL, side=side, type="STOP_MARKET",
+                        stopPrice=round(entry_price, 1), closePosition="true", timeInForce="GTE_GTC"
+                    )
+                    log.info(f"🛡️ Trailing Stop Aktif! SL dipindah ke {round(entry_price, 1)}")
+                    if self._notifier:
+                        await self._notifier.notify_info(
+                            f"🛡️ <b>Trailing Stop Aktif!</b>\n"
+                            f"Profit mencapai > {BREAK_EVEN_TRIGGER_PCT*100}%. "
+                            f"SL telah dipindah ke titik impas: <code>{round(entry_price, 1):,.1f}</code>"
+                        )
+        except Exception as e:
+            log.error(f"Error di manage_trailing_stop: {e}")
+

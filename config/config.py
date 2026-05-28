@@ -21,10 +21,10 @@ TRADE_END_HOUR_UTC = 21    # 21:00 UTC (Akhir New York Session)
 # Risk Management
 MAX_DAILY_DRAWDOWN_PCT = 0.20
 TRADE_RISK_PCT = 0.01  # Risk 1% per trade
-LEVERAGE = 20
+LEVERAGE = 60
 
 # TP/SL Targets (Risk:Reward Ratio)
-RRR_TP1 = 1.5   # TP1 = 1.5x SL distance
+RRR_TP1 = 2.0 # Take Profit (1:2 RRR)x SL distance
 
 # Indicators - Bollinger Bands
 BOLLINGER_PERIOD = 20
@@ -37,7 +37,7 @@ RSI_OVERBOUGHT = 70  # Dilonggarkan dari 80 → 70 (lebih realistis di 5m)
 
 # Advanced Filters & Dynamic SL
 ATR_PERIOD = 14
-ATR_MULTIPLIER = 1.5
+ATR_MULTIPLIER = 3.0
 EMA_MTF_PERIOD = 200          # EMA 200 di 15m sebagai filter tren makro
 ADX_PERIOD = 14
 ADX_THRESHOLD = 30            # Dinaikkan dari 25 → 30 agar lebih toleran
@@ -51,11 +51,14 @@ VOLUME_SPIKE_MULTIPLIER = 1.5  # Volume harus 1.5x rata-rata untuk bonus skor
 
 # BB Squeeze Detection (Hindari masuk saat konsolidasi sempit)
 # BB Width = (BBH - BBL) / Price. Jika < threshold, pasar sedang squeeze
-BB_SQUEEZE_THRESHOLD = 0.015  # 1.5% — di bawah ini dianggap squeeze, skip entry
+BB_SQUEEZE_THRESHOLD = 0.002  # 0.2% — di bawah ini dianggap squeeze untuk TF 5m
 
 # Minimum Signal Score untuk eksekusi (dari total maks 5 poin)
 # Breakdown: BB_touch(2) + EMA200_trend(1) + OFI_boost(1) + Volume_spike(1)
 MIN_SIGNAL_SCORE = 3
+
+# Trailing Stop / Break Even
+BREAK_EVEN_TRIGGER_PCT = 0.005  # Pindah SL ke titik impas jika profit > 0.5%
 
 # Cooldown pasca trade (dalam jumlah candle 5m, 1 candle = 5 menit)
 COOLDOWN_CANDLES = 3  # Jeda 15 menit setelah trade selesai

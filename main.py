@@ -41,6 +41,7 @@ class ScalpBot:
     async def start(self):
         log.info("Starting Scalp BTC Bot...")
         await self.trader.initialize()
+        self.trader._notifier = self.notifier
 
         # Cek posisi aktif saat startup
         self.in_position = await self.trader.has_open_position()
@@ -64,8 +65,10 @@ class ScalpBot:
         self.in_position = await self.trader.has_open_position()
 
         if self.in_position:
-            log.info("[SKIP] Posisi masih terbuka. Menunggu SL/TP...")
-            return
+            # Periksa Trailing Stop (Break Even) jika masih punya posisi
+            await self.trader.manage_trailing_stop()
+            log.info("Posisi masih terbuka. Menjalankan AI untuk observasi (Ghost Signal)...")
+            # Tidak melakukan return agar strategi tetap berjalan
 
         # Cooldown check
         if self.candles_since_last_trade < COOLDOWN_CANDLES:
@@ -87,13 +90,17 @@ class ScalpBot:
             is_approved, reasoning = await self.ai.validate(signal, df_5m, ofi, context)
 
             if is_approved:
-                log.info("AI MENYETUJUI → Eksekusi order...")
-                sl_price, tp_price, qty = await self.trader.execute_trade(signal, price, sl_distance)
-
-                if sl_price:
-                    self.in_position = True
-                    self.candles_since_last_trade = 0  # Reset cooldown
-                    await self.notifier.notify_trade(signal, price, qty, sl_price, tp_price)
+                if self.in_position:
+                    log.info(f"AI MENYETUJUI [GHOST SIGNAL] → Tidak dieksekusi ke bursa.")
+                    await self.notifier.notify_ghost_signal(signal, price, reasoning)
+                else:
+                    log.info("AI MENYETUJUI → Eksekusi order...")
+                    sl_price, tp_price, qty = await self.trader.execute_trade(signal, price, sl_distance)
+    
+                    if sl_price:
+                        self.in_position = True
+                        self.candles_since_last_trade = 0  # Reset cooldown
+                        await self.notifier.notify_trade(signal, price, qty, sl_price, tp_price)
             else:
                 log.info(f"AI MENOLAK | Alasan: {reasoning}")
                 await self.notifier.notify_ai_rejected(signal, price, reasoning)

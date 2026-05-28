@@ -64,7 +64,7 @@ Pertimbangkan:
 
 Jawab HANYA dengan format JSON berikut, tanpa teks lain:
 {{
-  "reasoning": "analisis Anda dalam 2-3 kalimat yang mencakup price action, konteks makro, dan OFI",
+  "reasoning": "analisis Anda dalam 2-3 kalimat yang mencakup price action, konteks makro, dan penentuan momentum",
   "approved": true atau false
 }}"""
 
