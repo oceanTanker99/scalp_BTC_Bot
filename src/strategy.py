@@ -1,7 +1,7 @@
 import pandas as pd
 import pandas_ta as ta
 import logging
-import datetime
+from datetime import datetime, timezone
 import csv
 import os
 from config.config import (
@@ -36,8 +36,8 @@ class StrategyEngine:
             sl_distance (float): dynamic stop loss distance (as fraction of price)
             context (dict): full indicator snapshot for AI enrichment
         """
-        # --- Trading Session Filter ---
-        current_hour_utc = datetime.datetime.utcnow().hour
+        # --- Filter Jam Trading ---
+        current_hour_utc = datetime.now(timezone.utc).hour
         if current_hour_utc < TRADE_START_HOUR_UTC or current_hour_utc >= TRADE_END_HOUR_UTC:
             return "NEUTRAL", 0.0, 0.0, {}
 
@@ -70,12 +70,12 @@ class StrategyEngine:
 
         # VWAP dengan Daily Reset (00:00 UTC)
         df_5m['date_utc'] = pd.to_datetime(df_5m['timestamp'], unit='ms', utc=True).dt.date
-        today_utc = df_5m['date_utc'].iloc[-1]
-        df_today = df_5m[df_5m['date_utc'] == today_utc].copy()
-        df_today['typical_price'] = (df_today['high'] + df_today['low'] + df_today['close']) / 3
-        df_today['vwap'] = (df_today['typical_price'] * df_today['volume']).cumsum() / df_today['volume'].cumsum()
-        df_5m = df_5m.merge(df_today[['timestamp', 'vwap']], on='timestamp', how='left')
-        df_5m['vwap'] = df_5m['vwap'].ffill()
+        df_5m['typical_price'] = (df_5m['high'] + df_5m['low'] + df_5m['close']) / 3
+        df_5m['cum_tp_vol'] = df_5m.groupby('date_utc').apply(
+            lambda g: (g['typical_price'] * g['volume']).cumsum()
+        ).reset_index(level=0, drop=True)
+        df_5m['cum_vol'] = df_5m.groupby('date_utc')['volume'].cumsum()
+        df_5m['vwap'] = df_5m['cum_tp_vol'] / df_5m['cum_vol']
 
         # Volume Moving Average (untuk deteksi volume spike)
         df_5m['volume_ma'] = df_5m['volume'].rolling(window=20).mean()
@@ -216,7 +216,7 @@ class StrategyEngine:
         try:
             with open(self.log_file, mode='a', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                ts = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
                 writer.writerow([
                     ts, price, round(rsi, 2), round(bbl, 2), round(bbh, 2),
                     round(bb_width, 4), round(vwap, 2), round(adx, 2), round(ema_200, 2),

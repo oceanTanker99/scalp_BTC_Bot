@@ -1,5 +1,4 @@
 import logging
-import asyncio
 import aiohttp
 from config.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
@@ -11,7 +10,7 @@ class TelegramNotifier:
         self.chat_id = TELEGRAM_CHAT_ID
         self.enabled = bool(self.token and self.chat_id)
         if not self.enabled:
-            log.warning("Telegram notifier disabled: TOKEN or CHAT_ID missing.")
+            log.warning("Notifikasi Telegram dinonaktifkan: TOKEN atau CHAT_ID tidak ditemukan.")
 
     async def send(self, message: str):
         if not self.enabled:
@@ -22,9 +21,9 @@ class TelegramNotifier:
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                     if resp.status != 200:
-                        log.error(f"Telegram send failed: {resp.status}")
+                        log.error(f"Gagal mengirim pesan Telegram: {resp.status}")
         except Exception as e:
-            log.error(f"Telegram error: {e}")
+            log.error(f"Error Telegram: {e}")
 
     async def notify_trade(self, signal: str, price: float, qty: float, sl: float, tp: float):
         emoji = "🟢" if signal == "LONG" else "🔴"
@@ -50,13 +49,13 @@ class TelegramNotifier:
         await self.send(msg)
 
     async def notify_ghost_signal(self, signal: str, price: float, reasoning: str):
-        emoji = "👻"
+        reason_text = reasoning[:200] + "..." if len(reasoning) > 200 else reasoning
         msg = (
-            f"{emoji} <b>[GHOST SIGNAL] AI MENYETUJUI: {signal}</b>\n"
+            f"👻 <b>[GHOST SIGNAL] AI MENYETUJUI: {signal}</b>\n"
             f"━━━━━━━━━━━━━━━━\n"
             f"⚠️ <i>Tidak dieksekusi karena ada posisi aktif</i>\n"
             f"💰 Harga  : <code>{price:,.1f}</code> USDT\n"
-            f"🧠 Alasan : {reasoning[:200]}...\n"
+            f"🧠 Alasan : {reason_text}\n"
         )
         await self.send(msg)
 

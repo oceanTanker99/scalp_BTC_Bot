@@ -1,0 +1,28 @@
+# Environment Variables (JANGAN pernah commit API keys!)
+.env
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Data & Logs (di-mount via Docker volume)
+data/
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Scratch & Debug files
+deepseek_answer.txt
+tools/

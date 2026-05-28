@@ -3,16 +3,22 @@ import logging
 from binance import AsyncClient, BinanceSocketManager
 import pandas as pd
 
-from config.config import BINANCE_API_KEY, BINANCE_SECRET_KEY, BINANCE_TESTNET, SYMBOL
+from config.config import SYMBOL
 
 log = logging.getLogger(__name__)
 
 RECONNECT_DELAY_SECONDS = 5
-MAX_KLINES = 300  # Batas maksimum candle yang disimpan (bug #9 pencegahan memory leak)
+MAX_KLINES = 300  # Batas maksimum candle yang disimpan (pencegahan memory leak)
+
 
 class MarketStream:
-    def __init__(self):
-        self.client = None
+    def __init__(self, client: AsyncClient = None):
+        """
+        Args:
+            client: Instance AsyncClient Binance yang sudah diinisialisasi.
+                    Jika None, akan dibuat di start().
+        """
+        self.client = client
         self.bsm = None
         self.klines_1m = []
         self.klines_5m = []
@@ -25,20 +31,22 @@ class MarketStream:
         self.callbacks.append(callback)
 
     async def start(self):
-        self.client = await AsyncClient.create(
-            BINANCE_API_KEY, BINANCE_SECRET_KEY, testnet=BINANCE_TESTNET
-        )
+        if self.client is None:
+            from config.config import BINANCE_API_KEY, BINANCE_SECRET_KEY, BINANCE_TESTNET
+            self.client = await AsyncClient.create(
+                BINANCE_API_KEY, BINANCE_SECRET_KEY, testnet=BINANCE_TESTNET
+            )
+
         self.bsm = BinanceSocketManager(self.client)
-        
         await self._load_historical()
 
-        # Perbaikan Bug #4: Setiap stream dibungkus dengan loop reconnect
+        # Setiap stream dibungkus dengan loop reconnect
         asyncio.create_task(self._run_with_reconnect("1m", self._kline_stream))
         asyncio.create_task(self._run_with_reconnect("5m", self._kline_stream))
         asyncio.create_task(self._run_with_reconnect("15m", self._kline_stream))
         asyncio.create_task(self._run_depth_with_reconnect())
 
-    # --- Perbaikan Bug #4: Reconnect Wrapper ---
+    # --- Reconnect Wrapper ---
     async def _run_with_reconnect(self, interval: str, stream_fn):
         while self._running:
             try:
@@ -46,11 +54,10 @@ class MarketStream:
             except Exception as e:
                 log.error(f"Stream {interval} terputus: {e}. Reconnect dalam {RECONNECT_DELAY_SECONDS} detik...")
                 await asyncio.sleep(RECONNECT_DELAY_SECONDS)
-                # Muat ulang data historis setelah reconnect
                 try:
                     await self._load_historical()
                 except Exception as reload_err:
-                    log.error(f"Gagal reload historical data: {reload_err}")
+                    log.error(f"Gagal reload data historis: {reload_err}")
 
     async def _run_depth_with_reconnect(self):
         while self._running:
@@ -61,10 +68,10 @@ class MarketStream:
                 await asyncio.sleep(RECONNECT_DELAY_SECONDS)
 
     async def _load_historical(self):
-        log.info("Loading historical data for initial calculations...")
+        log.info("Memuat data historis untuk kalkulasi awal...")
         res_1m = await self.client.futures_klines(symbol=SYMBOL, interval="1m", limit=100)
         self.klines_1m = self._parse_klines(res_1m)
-        
+
         res_5m = await self.client.futures_klines(symbol=SYMBOL, interval="5m", limit=100)
         self.klines_5m = self._parse_klines(res_5m)
 
@@ -87,13 +94,24 @@ class MarketStream:
             kline_list.pop(0)
         kline_list.append(formatted)
 
+    def _update_or_append_live(self, kline_list: list, formatted: dict):
+        """
+        Update candle yang sedang berjalan (belum ditutup).
+        FIX BUG-01: Terapkan MAX_KLINES juga untuk candle live agar tidak memory leak.
+        """
+        if kline_list and kline_list[-1]['timestamp'] == formatted['timestamp']:
+            kline_list[-1] = formatted
+        else:
+            # Candle baru yang belum ada — terapkan batas MAX_KLINES
+            self._update_klines(kline_list, formatted)
+
     async def _kline_stream(self, interval):
-        log.info(f"Starting {interval} kline stream...")
+        log.info(f"Memulai stream kline {interval}...")
         async with self.bsm.kline_socket(symbol=SYMBOL, interval=interval) as stream:
             while True:
                 msg = await stream.recv()
                 kline = msg['k']
-                
+
                 formatted = {
                     "timestamp": kline['t'],
                     "open": float(kline['o']),
@@ -102,37 +120,28 @@ class MarketStream:
                     "close": float(kline['c']),
                     "volume": float(kline['v'])
                 }
-                
+
                 if interval == "1m":
                     if kline['x']:
                         self._update_klines(self.klines_1m, formatted)
                     else:
-                        if self.klines_1m and self.klines_1m[-1]['timestamp'] == formatted['timestamp']:
-                            self.klines_1m[-1] = formatted
-                        else:
-                            self.klines_1m.append(formatted)
+                        self._update_or_append_live(self.klines_1m, formatted)
 
                 elif interval == "5m":
                     if kline['x']:
                         self._update_klines(self.klines_5m, formatted)
                         await self._trigger_callbacks()
                     else:
-                        if self.klines_5m and self.klines_5m[-1]['timestamp'] == formatted['timestamp']:
-                            self.klines_5m[-1] = formatted
-                        else:
-                            self.klines_5m.append(formatted)
+                        self._update_or_append_live(self.klines_5m, formatted)
 
                 elif interval == "15m":
                     if kline['x']:
                         self._update_klines(self.klines_15m, formatted)
                     else:
-                        if self.klines_15m and self.klines_15m[-1]['timestamp'] == formatted['timestamp']:
-                            self.klines_15m[-1] = formatted
-                        else:
-                            self.klines_15m.append(formatted)
+                        self._update_or_append_live(self.klines_15m, formatted)
 
     async def _depth_stream(self):
-        log.info("Starting depth stream for OFI...")
+        log.info("Memulai depth stream untuk kalkulasi OFI...")
         async with self.bsm.depth_socket(symbol=SYMBOL, depth="5") as stream:
             while True:
                 msg = await stream.recv()
@@ -141,6 +150,7 @@ class MarketStream:
                     self.orderbook['asks'] = [[float(x[0]), float(x[1])] for x in msg['asks']]
 
     def get_ofi(self) -> float:
+        """Hitung Order Flow Imbalance dari 5 level teratas orderbook."""
         if not self.orderbook['bids'] or not self.orderbook['asks']:
             return 0
         bid_vol = sum(vol for _, vol in self.orderbook['bids'])

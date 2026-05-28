@@ -1,0 +1,1 @@
+# Paket config — konfigurasi terpusat
