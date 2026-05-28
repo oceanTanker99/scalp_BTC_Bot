@@ -1,4 +1,3 @@
-import os
 import json
 import logging
 from openai import AsyncOpenAI
@@ -16,62 +15,82 @@ class DeepSeekValidator:
         else:
             self.client = AsyncOpenAI(api_key=self.api_key, base_url="https://api.deepseek.com/v1")
 
-    async def validate(self, signal: str, df_5m: pd.DataFrame, ofi: float) -> bool:
+    async def validate(self, signal: str, df_5m: pd.DataFrame, ofi: float, context: dict = None) -> tuple[bool, str]:
+        """
+        Validasi sinyal menggunakan DeepSeek AI.
+        context: dict kaya informasi indikator dari StrategyEngine.
+        """
         if not self.client:
             log.warning("No DeepSeek Client initialized. Approving by default.")
-            return True
-            
+            return True, "AI disabled"
+
         try:
-            # Mengambil 5 candle terakhir untuk menunjukkan price action terbaru
-            recent_candles = df_5m.tail(5)[['timestamp', 'open', 'high', 'low', 'close', 'volume', 'rsi']].to_dict(orient='records')
-            current = df_5m.iloc[-1]
-            
-            # Mendapatkan ADX column name secara dinamis
-            adx_col = [col for col in df_5m.columns if col.startswith('ADX_')][0]
-            
-            prompt = f"""Anda adalah Quant Trader elit. Bot algoritmik mendeteksi sinyal {signal} di grafik 5 Menit.
-            Data terkini:
-            Harga: {current['close']}
-            RSI: {current['rsi']}
-            ADX: {current[adx_col]}
-            OFI (Order Flow Imbalance): {ofi}
-            
-            5 Candle Terakhir (OHLCV):
-            {json.dumps(recent_candles, indent=2)}
-            
-            Berdasarkan data teknikal murni ini, validasi apakah sinyal {signal} ini memiliki probabilitas tinggi untuk sukses (berupa pantulan mean-reversion) atau berisiko tinggi terjebak dalam tren kuat (fakeout).
-            Anda harus menjawab HANYA dengan format JSON yang valid, tanpa tambahan teks apapun.
-            Format JSON yang WAJIB digunakan:
-            {{
-              "reasoning": "alasan singkat analisis anda (max 2 kalimat)",
-              "approved": true atau false
-            }}
-            """
-            
-            log.info(f"Meminta validasi dari DeepSeek AI untuk sinyal {signal}...")
+            # Perbaikan #7: Ambil 8 candle terakhir (diperluas dari 5)
+            cols_to_show = [c for c in ['timestamp', 'open', 'high', 'low', 'close', 'volume', 'rsi'] if c in df_5m.columns]
+            recent_candles = df_5m.tail(8)[cols_to_show].round(2).to_dict(orient='records')
+
+            # Gunakan context dari StrategyEngine jika tersedia
+            ctx = context or {}
+
+            # Tentukan zona harga relatif terhadap VWAP dan EMA 200
+            price_zone = "Di atas VWAP" if ctx.get('price_vs_vwap_pct', 0) > 0 else "Di bawah VWAP"
+            macro_zone = "Di atas EMA 200 (Bullish Makro)" if ctx.get('price_vs_ema200_pct', 0) > 0 else "Di bawah EMA 200 (Bearish Makro)"
+
+            prompt = f"""Anda adalah Quant Trader institusional yang menggunakan strategi Mean-Reversion.
+Bot telah mendeteksi sinyal potensial: **{signal}** di grafik 5 Menit BTC/USDT.
+
+═══ SNAPSHOT INDIKATOR SAAT INI ═══
+Harga          : {ctx.get('price', 'N/A')} USDT
+RSI (7)        : {ctx.get('rsi', 'N/A')} {'🟢 Oversold' if signal == 'LONG' else '🔴 Overbought'}
+Bollinger Low  : {ctx.get('bbl', 'N/A')} | Bollinger High: {ctx.get('bbh', 'N/A')}
+BB Width       : {ctx.get('bb_width_pct', 'N/A')}% {'(Sempit/Squeeze)' if ctx.get('bb_width_pct', 99) < 2 else '(Normal/Melebar)'}
+VWAP (Harian)  : {ctx.get('vwap', 'N/A')} → Harga {price_zone} ({ctx.get('price_vs_vwap_pct', 'N/A')}%)
+EMA 200 (15m)  : {ctx.get('ema_200_15m', 'N/A')} → {macro_zone} ({ctx.get('price_vs_ema200_pct', 'N/A')}%)
+ADX (Tren)     : {ctx.get('adx', 'N/A')} {'(Tren Lemah ✓)' if ctx.get('adx', 99) < 25 else '(Tren Kuat ⚠️)'}
+ATR Volatilitas: {ctx.get('atr', 'N/A')} ({ctx.get('atr_pct', 'N/A')}% dari harga)
+OFI Orderbook  : {ctx.get('ofi', 'N/A')} {'(Dominasi Beli ✓)' if ofi > 0 else '(Dominasi Jual)'}
+Volume Spike   : {'YA 🔥' if ctx.get('volume_spike') else 'Tidak'}
+Skor Sinyal    : {ctx.get('score', 'N/A')}/5
+
+═══ 8 CANDLE TERAKHIR (5 MENIT) ═══
+{json.dumps(recent_candles, indent=2)}
+
+═══ TUGAS ANDA ═══
+Berdasarkan seluruh data di atas, tentukan apakah sinyal **{signal}** ini layak dieksekusi sebagai trade Mean-Reversion.
+Pertimbangkan:
+1. Apakah harga benar-benar sudah "terlalu jauh dari equilibrium" (VWAP/EMA 200) dan siap memantul?
+2. Apakah aksi harga di 8 candle terakhir mendukung atau menentang potensi reversal?
+3. Apakah ada tanda-tanda momentum berlanjut (bearish engulfing, volume terus naik saat turun) yang menunjukkan ini BUKAN reversal tapi continuation?
+
+Jawab HANYA dengan format JSON berikut, tanpa teks lain:
+{{
+  "reasoning": "analisis Anda dalam 2-3 kalimat yang mencakup price action, konteks makro, dan OFI",
+  "approved": true atau false
+}}"""
+
+            log.info(f"Meminta validasi DeepSeek untuk sinyal {signal} (skor: {ctx.get('score', '?')}/5)...")
             response = await self.client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[
-                    {"role": "system", "content": "You are an elite quantitative trader AI. You must output strict JSON."},
+                    {"role": "system", "content": "You are an elite institutional quantitative trader specializing in mean-reversion strategies. Output only strict JSON."},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.1
             )
-            
+
             result_str = response.choices[0].message.content
             result_json = json.loads(result_str)
-            
-            log.info(f"[DEEPSEEK REASONING] {result_json.get('reasoning')}")
+
+            reasoning  = result_json.get('reasoning', '-')
             is_approved = result_json.get('approved', False)
-            log.info(f"[DEEPSEEK DECISION] {'✅ APPROVED' if is_approved else '❌ REJECTED'}")
-            
-            return is_approved
-            
+
+            log.info(f"[DEEPSEEK] {'✅ APPROVED' if is_approved else '❌ REJECTED'} | {reasoning}")
+            return is_approved, reasoning
+
         except json.JSONDecodeError:
-            log.error(f"DeepSeek mengembalikan format JSON yang tidak valid: {result_str}")
-            return False
+            log.error("DeepSeek returned invalid JSON")
+            return False, "JSON decode error"
         except Exception as e:
-            log.error(f"Error memanggil DeepSeek API: {e}")
-            # Failsafe: Jika API mati/error, tolak sinyal demi keamanan
-            return False
+            log.error(f"DeepSeek API error: {e}")
+            return False, str(e)

@@ -1,0 +1,27 @@
+# Version Control
+.git
+.gitignore
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Scratch & Debug Scripts (jangan masuk Docker)
+scratch_*.py
+debug_*.py
+check_*.py
+ask_deepseek_scratch.py
+test_trade.py
+deepseek_answer.txt
+
+# Env (jangan pernah dibuild ke dalam image)
+.env
+
+# Logs & Data (sudah di-mount via volume di docker-compose)
+logs/
+data/
+
+# IDE
+.vscode/
+.idea/
