@@ -263,18 +263,35 @@ class LiveTrader:
 
                 if needs_move:
                     log.info(f"🛡️ Menggeser SL ke Break Even ({entry_price})...")
-                    await self.client.futures_cancel_order(symbol=SYMBOL, orderId=sl_order['orderId'])
+                    try:
+                        await self.client.futures_cancel_order(symbol=SYMBOL, orderId=sl_order['orderId'])
+                    except Exception as e:
+                        log.error(f"Gagal membatalkan SL lama: {e}")
+                        return
+                    
                     side = "SELL" if direction == "LONG" else "BUY"
-                    await self.client.futures_create_order(
-                        symbol=SYMBOL, side=side, type="STOP_MARKET",
-                        stopPrice=round(entry_price, 1), closePosition="true", timeInForce="GTE_GTC"
-                    )
-                    log.info(f"🛡️ Trailing Stop aktif! SL dipindah ke {round(entry_price, 1)}")
-                    if self._notifier:
-                        await self._notifier.notify_info(
-                            f"🛡️ <b>Trailing Stop Aktif!</b>\n"
-                            f"Profit mencapai > {BREAK_EVEN_TRIGGER_PCT*100}%. "
-                            f"SL telah dipindah ke titik impas: <code>{round(entry_price, 1):,.1f}</code>"
+                    try:
+                        await self.client.futures_create_order(
+                            symbol=SYMBOL, side=side, type="STOP_MARKET",
+                            stopPrice=round(entry_price, 1), closePosition="true", timeInForce="GTE_GTC"
                         )
+                        log.info(f"🛡️ Trailing Stop aktif! SL dipindah ke {round(entry_price, 1)}")
+                        if self._notifier:
+                            await self._notifier.notify_info(
+                                f"🛡️ <b>Trailing Stop Aktif!</b>\n"
+                                f"Profit mencapai > {BREAK_EVEN_TRIGGER_PCT*100}%. "
+                                f"SL telah dipindah ke titik impas: <code>{round(entry_price, 1):,.1f}</code>"
+                            )
+                    except Exception as e:
+                        log.error(f"🚨 FATAL: Gagal membuat SL baru di {entry_price}: {e}. Mencoba mengembalikan SL lama...")
+                        try:
+                            # Coba pasang ulang SL lama sebagai jaring pengaman terakhir
+                            await self.client.futures_create_order(
+                                symbol=SYMBOL, side=side, type="STOP_MARKET",
+                                stopPrice=current_sl, closePosition="true", timeInForce="GTE_GTC"
+                            )
+                            log.info("🛡️ SL lama berhasil dipulihkan.")
+                        except Exception as e2:
+                            log.error(f"🚨🚨 KRITIKAL: Gagal memulihkan SL lama: {e2}. POSISI SAAT INI TANPA STOP LOSS!")
         except Exception as e:
             log.error(f"Error di manage_trailing_stop: {e}")
