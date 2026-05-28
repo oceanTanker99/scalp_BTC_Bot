@@ -70,7 +70,21 @@ class TelegramNotifier:
         await self.send(msg)
 
     async def notify_error(self, error_msg: str):
-        msg = f"⚠️ <b>ERROR BOT</b>\n<code>{error_msg[:500]}</code>"
+        msg = f"💥 <b>FATAL ERROR</b> 💥\n\n<code>{error_msg}</code>\n\nBot mungkin terhenti!"
+        await self.send(msg)
+
+    async def notify_news_pause(self, event_title: str, country: str, event_time_str: str):
+        msg = (
+            f"📰 <b>NEWS FILTER AKTIF!</b> 📰\n\n"
+            f"Mengamankan bot karena ada rilis data High Impact:\n"
+            f"📌 <b>Event:</b> {event_title} ({country})\n"
+            f"⏰ <b>Waktu:</b> {event_time_str} UTC\n\n"
+            f"<i>Bot masuk mode siaga. Tidak akan mencari sinyal baru selama 30 menit sebelum/sesudah berita.</i>"
+        )
+        await self.send(msg)
+
+    async def notify_news_resume(self):
+        msg = "✅ <b>NEWS FILTER SELESAI</b>\n\nBadai volatilitas berita telah berlalu. Bot kembali berburu sinyal di pasar! 🏹"
         await self.send(msg)
 
     async def notify_info(self, info_msg: str):

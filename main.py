@@ -11,6 +11,8 @@ from src.strategy import StrategyEngine
 from src.live_trader import LiveTrader
 from src.ai_analyzer import DeepSeekValidator
 from src.notifier import TelegramNotifier
+from src.calendar import EconomicCalendar
+from src.sentiment import MarketSentiment
 from config.config import (
     BINANCE_API_KEY, BINANCE_SECRET_KEY, BINANCE_TESTNET,
     COOLDOWN_CANDLES
@@ -40,6 +42,8 @@ class ScalpBot:
         self.trader = None
         self.ai = DeepSeekValidator()
         self.notifier = TelegramNotifier()
+        self.calendar = EconomicCalendar()
+        self.sentiment = None  # Dibuat di start()
 
         self.in_position = False
         self._was_in_position = False  # Untuk deteksi transisi posisi
@@ -57,6 +61,7 @@ class ScalpBot:
         # Injeksikan client ke modul-modul
         self.stream = MarketStream(client=self.client)
         self.trader = LiveTrader(client=self.client)
+        self.sentiment = MarketSentiment(client=self.client)
 
         await self.trader.initialize()
         self.trader._notifier = self.notifier
@@ -71,6 +76,11 @@ class ScalpBot:
         balance = await self.trader.get_balance()
         await self.notifier.notify_startup(balance)
 
+        # Mulai stream dan calendar di background
+        await self.calendar.start()
+        # Beri waktu kalender mengambil data awal
+        await asyncio.sleep(2)
+        
         await self.stream.start()
 
         # Keep alive
@@ -104,6 +114,27 @@ class ScalpBot:
         if self.in_position:
             # Periksa Trailing Stop (Break Even)
             await self.trader.manage_trailing_stop()
+        
+        # --- Cek News Filter (Kalender Ekonomi) ---
+        blocking_news = self.calendar.get_current_blocking_event()
+        if blocking_news:
+            if not self.calendar.is_paused:
+                self.calendar.is_paused = True
+                event_time_str = blocking_news['dt'].strftime("%Y-%m-%d %H:%M")
+                log.warning(f"📰 NEWS FILTER AKTIF: Menghindari rilis {blocking_news['title']} ({blocking_news['country']})")
+                await self.notifier.notify_news_pause(blocking_news['title'], blocking_news['country'], event_time_str)
+            
+            # Jika ada posisi terbuka, biarkan (karena trailing stop sudah di-manage di atas), tapi tolak sinyal baru
+            return
+        else:
+            if self.calendar.is_paused:
+                self.calendar.is_paused = False
+                log.info("✅ Badai berita berlalu. Bot kembali beroperasi normal.")
+                await self.notifier.notify_news_resume()
+                self.candles_since_last_trade = 0  # Opsional: reset cooldown agar langsung siap
+
+        # --- Jika masih ada posisi aktif (lanjutan Ghost Signal) ---
+        if self.in_position:
 
             # Hitung cooldown meskipun sedang hold (agar siap saat posisi tutup)
             self.candles_since_last_trade += 1
@@ -116,7 +147,8 @@ class ScalpBot:
                     f"👻 [GHOST SIGNAL] {signal} @ {price:.1f} | "
                     f"Skor: {context.get('score', '?')}/5"
                 )
-                is_approved, reasoning = await self.ai.validate(signal, df_5m, ofi, context)
+                sentiment_data = await self.sentiment.get_sentiment()
+                is_approved, reasoning = await self.ai.validate(signal, df_5m, ofi, context, sentiment_data)
                 if is_approved:
                     log.info(f"👻 AI menyetujui ghost signal — tidak dieksekusi (posisi aktif).")
                     await self.notifier.notify_ghost_signal(signal, price, reasoning)
@@ -142,7 +174,8 @@ class ScalpBot:
             )
 
             # Kirim ke DeepSeek AI untuk validasi akhir
-            is_approved, reasoning = await self.ai.validate(signal, df_5m, ofi, context)
+            sentiment_data = await self.sentiment.get_sentiment()
+            is_approved, reasoning = await self.ai.validate(signal, df_5m, ofi, context, sentiment_data)
 
             if is_approved:
                 log.info("✅ AI menyetujui sinyal → Eksekusi order...")

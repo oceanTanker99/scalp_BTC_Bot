@@ -71,9 +71,10 @@ class StrategyEngine:
         # VWAP dengan Daily Reset (00:00 UTC)
         df_5m['date_utc'] = pd.to_datetime(df_5m['timestamp'], unit='ms', utc=True).dt.date
         df_5m['typical_price'] = (df_5m['high'] + df_5m['low'] + df_5m['close']) / 3
-        df_5m['cum_tp_vol'] = df_5m.groupby('date_utc').apply(
-            lambda g: (g['typical_price'] * g['volume']).cumsum()
-        ).reset_index(level=0, drop=True)
+        
+        # Gunakan kolom sementara untuk menghindari bug apply() di Pandas >= 2.2
+        df_5m['tp_vol'] = df_5m['typical_price'] * df_5m['volume']
+        df_5m['cum_tp_vol'] = df_5m.groupby('date_utc')['tp_vol'].cumsum()
         df_5m['cum_vol'] = df_5m.groupby('date_utc')['volume'].cumsum()
         df_5m['vwap'] = df_5m['cum_tp_vol'] / df_5m['cum_vol']
 

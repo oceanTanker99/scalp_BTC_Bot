@@ -10,7 +10,6 @@ log = logging.getLogger(__name__)
 AI_REQUEST_TIMEOUT = 30   # Timeout per request dalam detik
 AI_MAX_RETRIES = 2        # Jumlah retry jika request gagal
 
-
 class DeepSeekValidator:
     def __init__(self):
         self.api_key = DEEPSEEK_API_KEY
@@ -25,24 +24,16 @@ class DeepSeekValidator:
             )
 
     async def validate(self, signal: str, df_5m: pd.DataFrame, ofi: float,
-                       context: dict = None) -> tuple[bool, str]:
+                       context: dict = None, sentiment: dict = None) -> tuple[bool, str]:
         """
-        Validasi sinyal menggunakan DeepSeek AI.
-
-        Args:
-            signal: Arah sinyal ('LONG' atau 'SHORT')
-            df_5m: DataFrame candle 5 menit
-            ofi: Order Flow Imbalance
-            context: Dict indikator dari StrategyEngine
-
-        Returns:
-            (is_approved, reasoning): Tuple bool dan string alasan
+        Validasi sinyal menggunakan DeepSeek AI dengan parameter Sentiment.
         """
         if not self.client:
             log.warning("Client DeepSeek tidak aktif. Sinyal disetujui otomatis.")
             return True, "AI nonaktif"
 
         ctx = context or {}
+        sent = sentiment or {}
 
         # Ambil 8 candle terakhir
         cols_to_show = [c for c in ['timestamp', 'open', 'high', 'low', 'close', 'volume', 'rsi']
@@ -57,6 +48,12 @@ class DeepSeekValidator:
         prompt = f"""Anda adalah Quant Trader institusional yang menggunakan strategi Mean-Reversion.
 Bot telah mendeteksi sinyal potensial: **{signal}** di grafik 5 Menit BTC/USDT.
 
+═══ DATA SENTIMEN DERIVATIVES (BINANCE) ═══
+Funding Rate          : {sent.get('funding_rate', 0)*100:.4f}%
+Open Interest         : {sent.get('open_interest', 0):,.0f}
+Top L/S Ratio (Paus)  : {sent.get('top_long_short_ratio', 1.0):.2f} ( >1: Banyak Long, <1: Banyak Short)
+Global L/S Ratio      : {sent.get('global_long_short_ratio', 1.0):.2f}
+
 ═══ SNAPSHOT INDIKATOR SAAT INI ═══
 Harga          : {ctx.get('price', 'N/A')} USDT
 RSI (7)        : {ctx.get('rsi', 'N/A')} {'🟢 Oversold' if signal == 'LONG' else '🔴 Overbought'}
@@ -66,7 +63,7 @@ VWAP (Harian)  : {ctx.get('vwap', 'N/A')} → Harga {price_zone} ({ctx.get('pric
 EMA 200 (15m)  : {ctx.get('ema_200_15m', 'N/A')} → {macro_zone} ({ctx.get('price_vs_ema200_pct', 'N/A')}%)
 ADX (Tren)     : {ctx.get('adx', 'N/A')} {'(Tren Lemah ✓)' if ctx.get('adx', 99) < 25 else '(Tren Kuat ⚠️)'}
 ATR Volatilitas: {ctx.get('atr', 'N/A')} ({ctx.get('atr_pct', 'N/A')}% dari harga)
-OFI Orderbook  : {ctx.get('ofi', 'N/A')} {'(Dominasi Beli ✓)' if ofi > 0 else '(Dominasi Jual)'}
+OFI Orderbook  : {ofi:.2f} {'(Dominasi Beli ✓)' if ofi > 0 else '(Dominasi Jual)'}
 Volume Spike   : {'YA 🔥' if ctx.get('volume_spike') else 'Tidak'}
 Skor Sinyal    : {ctx.get('score', 'N/A')}/5
 
@@ -76,13 +73,14 @@ Skor Sinyal    : {ctx.get('score', 'N/A')}/5
 ═══ TUGAS ANDA ═══
 Berdasarkan seluruh data di atas, tentukan apakah sinyal **{signal}** ini layak dieksekusi sebagai trade Mean-Reversion.
 Pertimbangkan:
-1. Apakah harga benar-benar sudah "terlalu jauh dari equilibrium" (VWAP/EMA 200) dan siap memantul?
-2. Apakah aksi harga di 8 candle terakhir mendukung atau menentang potensi reversal?
-3. Apakah ada tanda-tanda momentum berlanjut (bearish engulfing, volume terus naik saat turun) yang menunjukkan ini BUKAN reversal tapi continuation?
+1. Sentimen Derivatives: Apakah Funding Rate terlalu berlawanan? Apakah Top Traders sedang berada di sisi yang berlawanan dengan sinyal ini? (Misal: Sinyal Long tapi Top L/S < 0.95, artinya paus sedang nge-Short).
+2. Apakah harga benar-benar sudah "terlalu jauh dari equilibrium" (VWAP/EMA 200) dan siap memantul?
+3. Apakah aksi harga di 8 candle terakhir mendukung atau menentang potensi reversal?
+4. Apakah ada tanda-tanda momentum berlanjut (bearish engulfing, volume terus naik saat turun) yang menunjukkan ini BUKAN reversal tapi continuation?
 
 Jawab HANYA dengan format JSON berikut, tanpa teks lain:
 {{
-  "reasoning": "analisis Anda dalam 2-3 kalimat yang mencakup price action, konteks makro, dan penentuan momentum",
+  "reasoning": "analisis Anda dalam 2-3 kalimat yang mencakup sentimen, price action, dan konteks makro",
   "approved": true atau false
 }}"""
 
