@@ -141,12 +141,12 @@ class LiveTrader:
             final_order = None
 
             for attempt in range(1, CHASE_MAX_ATTEMPTS + 1):
-                # Hitung harga limit: semakin agresif setiap percobaan
-                offset = CHASE_OFFSET_PCT * attempt
+                # Ambil Best Bid/Ask terbaru agar Post-Only (GTX) pasti diterima
+                ob_ticker = await self.client.futures_orderbook_ticker(symbol=SYMBOL)
                 if signal == 'LONG':
-                    limit_price = round(current_price * (1 + offset), 1)
+                    limit_price = float(ob_ticker['bidPrice'])
                 else:
-                    limit_price = round(current_price * (1 - offset), 1)
+                    limit_price = float(ob_ticker['askPrice'])
 
                 log.info(
                     f"📤 Percobaan {attempt}/{CHASE_MAX_ATTEMPTS} — "
