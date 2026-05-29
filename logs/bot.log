@@ -470,3 +470,65 @@
 2026-05-29 08:00:29,413 [INFO] Memulai stream kline 5m...
 2026-05-29 08:00:29,414 [INFO] Memulai stream kline 15m...
 2026-05-29 08:00:29,415 [INFO] Memulai depth stream untuk kalkulasi OFI...
+2026-05-29 08:04:57,645 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 08:09:57,473 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 08:14:57,489 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 08:19:57,423 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 08:24:57,427 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 08:29:57,424 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 08:34:57,406 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 08:39:57,385 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 08:44:57,387 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 08:49:57,354 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 08:54:57,363 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 08:59:57,359 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 09:04:57,332 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 09:09:57,322 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 09:14:57,326 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 09:14:57,338 [INFO] [SIGNAL] SHORT | Score: 3/5 | Price: 73816.7 | RSI: 72.4 | ADX: 18.8 | OFI: 0.286 | VolSpike: False | BBW: 0.0033
+2026-05-29 09:14:57,340 [INFO] 👻 [GHOST SIGNAL] SHORT @ 73816.7 | Skor: 3/5
+2026-05-29 09:14:59,276 [INFO] 🧠 Meminta validasi DeepSeek untuk sinyal SHORT (skor: 3/5, percobaan 1/2)...
+2026-05-29 09:15:00,471 [INFO] HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 09:15:02,530 [INFO] [DEEPSEEK] ✅ DISETUJUI | RSI overbought (72.41) dan harga di atas VWAP (0.376%) menunjukkan kondisi jenuh beli jangka pendek, namun harga masih di bawah EMA 200 (bearish makro) dan BB width sempit (squeeze) mengindikasikan potensi reversal. Funding rate positif (0.0042%) dan Top L/S ratio 1.70 (dominan long) mendukung sinyal short karena paus cenderung long, sehingga potensi koreksi. 8 candle terakhir menunjukkan kenaikan dari 73653 ke 73816 dengan volume tidak meningkat signifikan, menandakan momentum melemah dan potensi reversal.
+2026-05-29 09:15:02,531 [INFO] 👻 AI menyetujui ghost signal — tidak dieksekusi (posisi aktif).
+2026-05-29 09:19:57,290 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 09:19:57,302 [INFO] [SIGNAL] SHORT | Score: 4/5 | Price: 73866.5 | RSI: 79.0 | ADX: 20.1 | OFI: -0.993 | VolSpike: False | BBW: 0.0038
+2026-05-29 09:19:57,311 [INFO] 👻 [GHOST SIGNAL] SHORT @ 73866.5 | Skor: 4/5
+2026-05-29 09:20:00,062 [INFO] 🧠 Meminta validasi DeepSeek untuk sinyal SHORT (skor: 4/5, percobaan 1/2)...
+2026-05-29 09:20:00,319 [INFO] HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 09:20:02,700 [INFO] [DEEPSEEK] ✅ DISETUJUI | RSI overbought (78.99) dan harga di atas Bollinger High menunjukkan ekstensi jangka pendek, namun harga masih di bawah EMA 200 (bearish makro) dan OFI negatif mendukung tekanan jual. Funding rate positif (0.0041%) dan Top L/S ratio >1 menunjukkan dominasi long, yang bisa memicu likuidasi jika harga turun. Namun, BB width sempit (squeeze) dan ADX rendah (20.06) menunjukkan tren lemah, sehingga potensi reversal lebih tinggi. 8 candle terakhir menunjukkan kenaikan bertahap dengan volume rendah, tidak ada tanda kelanjutan bearish yang kuat. Sinyal short layak dieksekusi dengan target mean-reversion ke VWAP atau BB Low.
+2026-05-29 09:20:02,701 [INFO] 👻 AI menyetujui ghost signal — tidak dieksekusi (posisi aktif).
+2026-05-29 09:24:57,304 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 09:29:57,294 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 09:29:57,311 [INFO] [SIGNAL] SHORT | Score: 4/5 | Price: 73887.0 | RSI: 81.9 | ADX: 23.5 | OFI: -0.988 | VolSpike: False | BBW: 0.0046
+2026-05-29 09:29:57,333 [INFO] 👻 [GHOST SIGNAL] SHORT @ 73887.0 | Skor: 4/5
+2026-05-29 09:29:58,278 [INFO] 🧠 Meminta validasi DeepSeek untuk sinyal SHORT (skor: 4/5, percobaan 1/2)...
+2026-05-29 09:29:58,519 [INFO] HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-29 09:30:00,793 [INFO] [DEEPSEEK] ❌ DITOLAK | RSI overbought (81.88) dan harga di atas Bollinger High serta VWAP menunjukkan ekstensi bullish yang ekstrem, cocok untuk mean-reversion short. Namun, funding rate positif (0.0039%) dan Top L/S Ratio 1.69 (paus dominan long) bertentangan dengan sinyal short, menunjukkan sentimen masih bullish. 8 candle terakhir menunjukkan harga naik terus dengan volume stabil, tidak ada tanda reversal bearish, sehingga risiko continuation tinggi. ADX lemah (23.48) mengonfirmasi tren lemah, tetapi momentum bullish masih kuat.
+2026-05-29 09:30:00,794 [INFO] 👻 AI menolak ghost signal: RSI overbought (81.88) dan harga di atas Bollinger High serta VWAP menunjukkan ekstensi bullish yang ekstrem, cocok untuk mean-reversion short. Namun, funding rate positif (0.0039%) dan Top L/S Ratio 1.69 (paus dominan long) bertentangan dengan sinyal short, menunjukkan sentimen masih bullish. 8 candle terakhir menunjukkan harga naik terus dengan volume stabil, tidak ada tanda reversal bearish, sehingga risiko continuation tinggi. ADX lemah (23.48) mengonfirmasi tren lemah, tetapi momentum bullish masih kuat.
+2026-05-29 09:34:57,266 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 09:39:57,262 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 09:44:57,271 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 09:49:57,244 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 09:54:57,233 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 09:59:57,371 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 10:04:57,352 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 10:09:57,234 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 10:14:57,889 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 10:19:57,170 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 10:24:59,049 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 10:29:57,621 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 10:34:57,336 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 10:39:57,106 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 10:44:57,137 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 10:49:57,089 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 10:54:57,083 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 10:56:31,175 [INFO] 🚀 Memulai Scalp BTC Bot...
+2026-05-29 10:56:31,975 [INFO] Live Trader diinisialisasi. Saldo awal: 4.98903845 USDT
+2026-05-29 10:56:32,079 [INFO] 📊 Posisi terbuka terdeteksi saat startup. Menunggu posisi tertutup...
+2026-05-29 10:56:33,136 [INFO] 📰 Kalender Ekonomi (USD/CNY High Impact) diperbarui: 2 jadwal minggu ini.
+2026-05-29 10:56:34,985 [INFO] Memuat data historis untuk kalkulasi awal...
+2026-05-29 10:56:35,316 [INFO] Memulai stream kline 1m...
+2026-05-29 10:56:35,325 [INFO] Memulai stream kline 5m...
+2026-05-29 10:56:35,327 [INFO] Memulai stream kline 15m...
+2026-05-29 10:56:35,328 [INFO] Memulai depth stream untuk kalkulasi OFI...

@@ -116,26 +116,60 @@ class StrategyEngine:
         # Volume Spike
         is_volume_spike = volume > (volume_ma * VOLUME_SPIKE_MULTIPLIER)
 
-        # ── DeepSeek R1: Metrik Anti-Stop-Hunt (PSO) ─────────────────────────
+        # ── DeepSeek R1: Metrik Anti-Stop-Hunt (PSO) & Pure Loss ─────────────
         avg_vol = volume_ma
         
         range_ht = current['high'] - current['low']
         if range_ht > 0:
             upper_wick_ratio = (current['high'] - max(current['open'], current['close'])) / range_ht
             lower_wick_ratio = (min(current['open'], current['close']) - current['low']) / range_ht
+            close_pos = (current['close'] - current['low']) / range_ht
         else:
             upper_wick_ratio = 0
             lower_wick_ratio = 0
+            close_pos = 0.5
             
         is_bullish_candle = current['close'] > current['open']
         is_bearish_candle = current['close'] < current['open']
         
         band_expanding = False
-        if len(df_5m) >= 2:
+        is_false_mean_reversion_long = False
+        is_false_mean_reversion_short = False
+
+        if len(df_5m) >= 5:
             prev_candle = df_5m.iloc[-2]
             prev_bandwidth = prev_candle[bbh_col] - prev_candle[bbl_col]
             current_bandwidth = bbh - bbl
             band_expanding = current_bandwidth > (prev_bandwidth * 1.05)
+
+            # Trend Continuation Check (4 prior candles)
+            prior_4 = df_5m.iloc[-5:-1]
+            is_uptrend_cont = all(
+                prior_4.iloc[i]['high'] > prior_4.iloc[i-1]['high'] and
+                prior_4.iloc[i]['low'] > prior_4.iloc[i-1]['low']
+                for i in range(1, 4)
+            )
+            is_downtrend_cont = all(
+                prior_4.iloc[i]['high'] < prior_4.iloc[i-1]['high'] and
+                prior_4.iloc[i]['low'] < prior_4.iloc[i-1]['low']
+                for i in range(1, 4)
+            )
+            
+            # Persistent Extreme RSI Check
+            persistent_ob = rsi > 70 and prev_candle['rsi'] > 70
+            persistent_os = rsi < 30 and prev_candle['rsi'] < 30
+            
+            # High Volume Breakout Check
+            avg_vol_4 = prior_4['volume'].mean()
+            vol_spike_breakout = volume > (1.5 * avg_vol_4)
+
+            # Combine rules
+            is_false_mean_reversion_short = (
+                vol_spike_breakout and is_uptrend_cont and persistent_ob and close_pos > 0.8
+            )
+            is_false_mean_reversion_long = (
+                vol_spike_breakout and is_downtrend_cont and persistent_os and close_pos < 0.2
+            )
 
         # ── Perbaikan #5: BB Squeeze Detection ───────────────────────────────
         if bb_width < BB_SQUEEZE_THRESHOLD:
@@ -177,24 +211,32 @@ class StrategyEngine:
             if not (bb_touch and rsi_ok):
                 continue  # Trigger utama wajib ada
 
-            # ── Injeksi Filter PSO (DeepSeek R1) ────────────────────────────────
+            # ── Injeksi Filter PSO & Pure Loss (DeepSeek R1) ────────────────────
             if direction == 'LONG':
-                # Rule 1: Pisau Jatuh Bearish
+                # Rule 1: False Mean Reversion (Pure Loss)
+                if is_false_mean_reversion_long:
+                    reject_reason = "Pure Loss Filter (R1): False Mean-Reversion Long"
+                    continue
+                # Rule 2: Pisau Jatuh Bearish
                 strong_bearish = (rsi < 28 and volume > avg_vol * 1.5 and is_bearish_candle and lower_wick_ratio < 0.3)
                 if strong_bearish:
                     reject_reason = "PSO Filter (R1): Pisau Jatuh Bearish"
                     continue
-                # Rule 2: BB Expansion Bearish
+                # Rule 3: BB Expansion Bearish
                 if (price < bbl) and band_expanding and (rsi < 30):
                     reject_reason = "PSO Filter (R1): BB Expansion Bearish"
                     continue
             else:
-                # Rule 1: Pisau Jatuh Bullish
+                # Rule 1: False Mean Reversion (Pure Loss)
+                if is_false_mean_reversion_short:
+                    reject_reason = "Pure Loss Filter (R1): False Mean-Reversion Short"
+                    continue
+                # Rule 2: Pisau Jatuh Bullish
                 strong_bullish = (rsi > 72 and volume > avg_vol * 1.5 and is_bullish_candle and upper_wick_ratio < 0.3)
                 if strong_bullish:
                     reject_reason = "PSO Filter (R1): Pisau Jatuh Bullish"
                     continue
-                # Rule 2: BB Expansion Bullish
+                # Rule 3: BB Expansion Bullish
                 if (price > bbh) and band_expanding and (rsi > 70):
                     reject_reason = "PSO Filter (R1): BB Expansion Bullish"
                     continue

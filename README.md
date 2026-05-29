@@ -14,7 +14,12 @@ Bot menggunakan sistem skor 5 poin yang menggabungkan beberapa lapisan analisis:
 4. **Order Flow Imbalance (OFI):** Bonus skor berdasarkan dominasi bid/ask di 5 level teratas orderbook via WebSocket depth stream. **(Opsional — 1 poin)**
 5. **AI Validator (DeepSeek):** Setelah lolos skor minimum (≥3/5), sinyal dikirim ke DeepSeek AI untuk validasi kontekstual akhir sebelum eksekusi.
 
-### Filter Tambahan
+### Filter Anti-Loss (Hasil Pelatihan AI DeepSeek R1)
+Berdasarkan analisis *Pure Loss* dan *Stop Hunts*, bot ini telah ditanamkan logika *pre-filter* canggih dari model DeepSeek R1 untuk mendeteksi pergerakan palsu sebelum eksekusi:
+- **False Mean-Reversion (Pure Loss) Filter**: Sinyal otomatis ditolak jika terjadi (1) *Volume Spike* yang brutal (>1.5x rata-rata), (2) tren searah yang sangat kuat selama 4 *candle* berturut-turut (tanpa *pullback*), (3) RSI tertahan di zona ekstrem selama > 2 *candle* (terlalu *overextended*), dan (4) harga penutupan hampir tidak memiliki ekor perlawanan (*strong momentum*).
+- **Stop-Hunt (PSO) Filter**: Sinyal ditolak jika terdeteksi ekspansi mulut buaya Bollinger (*Volatility Expansion*) atau pola "Pisau Jatuh" (*Falling Knife*).
+
+### Filter Lingkungan Makro
 - **ADX Filter:** Sinyal ditolak jika ADX > 30 (tren terlalu kuat untuk mean-reversion).
 - **BB Squeeze Detection:** Sinyal ditolak jika BB Width < 0.2% (pasar sedang konsolidasi sempit).
 - **Trading Session:** Bot hanya aktif pada jam 08:00–21:00 UTC (London + New York session).
