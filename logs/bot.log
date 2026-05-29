@@ -216,3 +216,257 @@
 2026-05-28 14:43:43,571 [INFO] Memulai stream kline 5m...
 2026-05-28 14:43:43,572 [INFO] Memulai stream kline 15m...
 2026-05-28 14:43:43,572 [INFO] Memulai depth stream untuk kalkulasi OFI...
+2026-05-28 14:44:59,952 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 14:49:59,885 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 14:55:00,002 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 14:59:59,887 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 15:04:59,841 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 15:09:59,844 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 15:14:59,958 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 15:19:59,828 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 15:24:59,802 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 15:29:59,803 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 15:34:59,769 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 15:39:59,914 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 15:44:59,762 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 15:49:59,737 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 15:54:59,737 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 15:59:59,745 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 16:04:59,706 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 16:09:59,711 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 16:14:59,680 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 16:14:59,690 [INFO] [SIGNAL] SHORT | Score: 5/5 | Price: 73109.6 | RSI: 73.3 | ADX: 14.3 | OFI: -0.810 | VolSpike: True | BBW: 0.0047
+2026-05-28 16:14:59,693 [INFO] 👻 [GHOST SIGNAL] SHORT @ 73109.6 | Skor: 5/5
+2026-05-28 16:15:00,187 [INFO] 🧠 Meminta validasi DeepSeek untuk sinyal SHORT (skor: 5/5, percobaan 1/2)...
+2026-05-28 16:15:01,286 [INFO] HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-28 16:15:04,163 [INFO] [DEEPSEEK] ✅ DISETUJUI | Funding rate positif 0.01% dan Top L/S Ratio 1.77 menunjukkan dominasi long, mendukung short. Harga di atas Bollinger High (73098) dengan RSI 73.29 overbought, namun di bawah VWAP dan EMA 200, menunjukkan potensi mean-reversion. Volume spike pada candle terakhir dengan harga naik ke 73109.55 bisa jadi exhaustion, dan ADX rendah (14.34) mengonfirmasi tren lemah, sehingga short layak dieksekusi.
+2026-05-28 16:15:04,163 [INFO] 👻 AI menyetujui ghost signal — tidak dieksekusi (posisi aktif).
+2026-05-28 16:19:59,676 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 16:19:59,688 [INFO] [SIGNAL] SHORT | Score: 4/5 | Price: 73143.2 | RSI: 75.6 | ADX: 16.1 | OFI: -0.972 | VolSpike: False | BBW: 0.0060
+2026-05-28 16:19:59,690 [INFO] 👻 [GHOST SIGNAL] SHORT @ 73143.2 | Skor: 4/5
+2026-05-28 16:20:00,124 [INFO] 🧠 Meminta validasi DeepSeek untuk sinyal SHORT (skor: 4/5, percobaan 1/2)...
+2026-05-28 16:20:00,359 [INFO] HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-28 16:20:03,988 [INFO] [DEEPSEEK] ✅ DISETUJUI | RSI overbought (75.64) dan harga di atas Bollinger High menunjukkan ekstrem jangka pendek, namun harga masih di bawah VWAP dan EMA 200 (bearish makro). Funding rate positif (0.01%) dan Top L/S Ratio >1 menunjukkan dominasi long, yang mendukung short squeeze potensial. Namun, ADX rendah (16) menunjukkan tren lemah, dan OFI negatif mengindikasikan tekanan jual, sehingga reversal mungkin terjadi. Aksi harga 8 candle terakhir menunjukkan kenaikan dari 72786 ke 73143 dengan volume meningkat, tetapi belum ada tanda pembalikan bearish yang kuat. Sinyal short layak dengan risiko terkendali.
+2026-05-28 16:20:03,989 [INFO] 👻 AI menyetujui ghost signal — tidak dieksekusi (posisi aktif).
+2026-05-28 16:24:59,651 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 16:24:59,662 [INFO] [SIGNAL] SHORT | Score: 3/5 | Price: 73262.0 | RSI: 82.9 | ADX: 19.9 | OFI: 0.908 | VolSpike: False | BBW: 0.0078
+2026-05-28 16:24:59,665 [INFO] 👻 [GHOST SIGNAL] SHORT @ 73262.0 | Skor: 3/5
+2026-05-28 16:25:00,362 [INFO] 🧠 Meminta validasi DeepSeek untuk sinyal SHORT (skor: 3/5, percobaan 1/2)...
+2026-05-28 16:25:00,682 [INFO] HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-28 16:25:04,097 [INFO] [DEEPSEEK] ❌ DITOLAK | RSI overbought (82.88) dan harga di atas Bollinger High menunjukkan ekstrem jangka pendek, namun funding rate positif (0.01%) dan Top L/S Ratio >1 mengindikasikan dominasi long yang bisa memicu squeeze. Harga di atas VWAP dan di bawah EMA 200 (bearish makro) menciptakan resistensi. 8 candle terakhir menunjukkan kenaikan bertahap tanpa volume spike, sehingga potensi reversal masih ada namun risiko continuation tinggi. Skor sinyal 3/5 dan ADX lemah mendukung mean-reversion, tetapi sentimen derivatives kurang mendukung short.
+2026-05-28 16:25:04,097 [INFO] 👻 AI menolak ghost signal: RSI overbought (82.88) dan harga di atas Bollinger High menunjukkan ekstrem jangka pendek, namun funding rate positif (0.01%) dan Top L/S Ratio >1 mengindikasikan dominasi long yang bisa memicu squeeze. Harga di atas VWAP dan di bawah EMA 200 (bearish makro) menciptakan resistensi. 8 candle terakhir menunjukkan kenaikan bertahap tanpa volume spike, sehingga potensi reversal masih ada namun risiko continuation tinggi. Skor sinyal 3/5 dan ADX lemah mendukung mean-reversion, tetapi sentimen derivatives kurang mendukung short.
+2026-05-28 16:29:59,640 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 16:34:59,634 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 16:39:59,616 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 16:44:59,594 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 16:49:59,615 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 16:54:59,591 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 16:59:59,639 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 17:04:59,700 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 17:09:59,562 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 17:14:59,558 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 17:19:59,558 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 17:24:59,506 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 17:29:59,510 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 17:34:59,473 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 17:39:59,477 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 17:44:59,503 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 17:49:59,550 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 17:54:59,461 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 17:59:59,451 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 18:04:59,506 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 18:09:59,559 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 18:14:59,630 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 18:19:59,471 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 18:24:59,447 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 18:29:59,617 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 18:34:59,416 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 18:39:59,423 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 18:44:59,426 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 18:49:59,399 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 18:54:59,406 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 18:59:59,435 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 19:04:59,272 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 19:09:59,246 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 19:14:59,342 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 19:19:59,233 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 19:24:59,230 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 19:29:59,320 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 19:34:59,232 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 19:39:59,363 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 19:44:59,176 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 19:49:59,160 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 19:54:59,146 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 19:59:59,157 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 20:04:59,115 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 20:09:59,158 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 20:14:59,129 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 20:19:59,189 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 20:19:59,199 [INFO] [SIGNAL] SHORT | Score: 3/5 | Price: 73570.0 | RSI: 73.4 | ADX: 20.0 | OFI: 0.421 | VolSpike: False | BBW: 0.0037
+2026-05-28 20:19:59,200 [INFO] 👻 [GHOST SIGNAL] SHORT @ 73570.0 | Skor: 3/5
+2026-05-28 20:20:01,370 [INFO] 🧠 Meminta validasi DeepSeek untuk sinyal SHORT (skor: 3/5, percobaan 1/2)...
+2026-05-28 20:20:01,686 [INFO] HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-28 20:20:03,766 [INFO] [DEEPSEEK] ✅ DISETUJUI | Funding rate positif (0.009%) dan Top L/S Ratio 1.84 menunjukkan dominasi long, yang mendukung short. Harga di atas VWAP dan RSI overbought (73.45) mengindikasikan ekstensi, namun EMA 200 bearish dan ADX rendah (19.97) menunjukkan tren lemah, cocok untuk mean-reversion. 8 candle terakhir menunjukkan kenaikan dari 73306 ke 73570 dengan volume menurun, mengindikasikan potensi exhaustion, bukan continuation.
+2026-05-28 20:20:03,766 [INFO] 👻 AI menyetujui ghost signal — tidak dieksekusi (posisi aktif).
+2026-05-28 20:24:59,192 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 20:24:59,205 [INFO] [SIGNAL] SHORT | Score: 4/5 | Price: 73598.4 | RSI: 76.2 | ADX: 21.5 | OFI: -0.418 | VolSpike: False | BBW: 0.0046
+2026-05-28 20:24:59,208 [INFO] 👻 [GHOST SIGNAL] SHORT @ 73598.4 | Skor: 4/5
+2026-05-28 20:25:00,343 [INFO] 🧠 Meminta validasi DeepSeek untuk sinyal SHORT (skor: 4/5, percobaan 1/2)...
+2026-05-28 20:25:00,555 [INFO] HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-28 20:25:03,201 [INFO] [DEEPSEEK] ❌ DITOLAK | RSI overbought (76.2) dan harga di atas Bollinger High menunjukkan ekstrem jangka pendek, didukung OFI negatif (dominasi jual) dan ADX lemah (21.5) yang cocok untuk mean-reversion. Namun, funding rate positif (0.0092%) dan Top L/S Ratio 1.84 (paus long) bertentangan dengan sinyal short, serta harga masih di atas VWAP (0.588%) dan jauh di bawah EMA 200 (-0.976%) menunjukkan tren bearish makro. 8 candle terakhir menunjukkan kenaikan bertahap tanpa volume spike, sehingga potensi reversal masih ada tetapi risiko tinggi karena sentimen derivatives berlawanan.
+2026-05-28 20:25:03,202 [INFO] 👻 AI menolak ghost signal: RSI overbought (76.2) dan harga di atas Bollinger High menunjukkan ekstrem jangka pendek, didukung OFI negatif (dominasi jual) dan ADX lemah (21.5) yang cocok untuk mean-reversion. Namun, funding rate positif (0.0092%) dan Top L/S Ratio 1.84 (paus long) bertentangan dengan sinyal short, serta harga masih di atas VWAP (0.588%) dan jauh di bawah EMA 200 (-0.976%) menunjukkan tren bearish makro. 8 candle terakhir menunjukkan kenaikan bertahap tanpa volume spike, sehingga potensi reversal masih ada tetapi risiko tinggi karena sentimen derivatives berlawanan.
+2026-05-28 20:29:59,179 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 20:29:59,189 [INFO] [SIGNAL] SHORT | Score: 3/5 | Price: 73647.4 | RSI: 80.9 | ADX: 23.5 | OFI: 0.838 | VolSpike: False | BBW: 0.0056
+2026-05-28 20:29:59,191 [INFO] 👻 [GHOST SIGNAL] SHORT @ 73647.4 | Skor: 3/5
+2026-05-28 20:30:00,955 [INFO] 🧠 Meminta validasi DeepSeek untuk sinyal SHORT (skor: 3/5, percobaan 1/2)...
+2026-05-28 20:30:01,160 [INFO] HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-28 20:30:03,415 [INFO] [DEEPSEEK] ❌ DITOLAK | RSI overbought (80.87) dan harga di atas Bollinger High menunjukkan kondisi jenuh beli, mendukung mean-reversion short. Namun, funding rate positif (0.0091%) dan dominasi beli di orderbook (OFI 0.84) serta harga di atas VWAP menunjukkan sentimen bullish yang kuat, sehingga risiko reversal rendah. 8 candle terakhir menunjukkan kenaikan bertahap tanpa volume spike, mengindikasikan momentum bullish masih berlanjut, bukan reversal. Oleh karena itu, sinyal short tidak layak dieksekusi.
+2026-05-28 20:30:03,416 [INFO] 👻 AI menolak ghost signal: RSI overbought (80.87) dan harga di atas Bollinger High menunjukkan kondisi jenuh beli, mendukung mean-reversion short. Namun, funding rate positif (0.0091%) dan dominasi beli di orderbook (OFI 0.84) serta harga di atas VWAP menunjukkan sentimen bullish yang kuat, sehingga risiko reversal rendah. 8 candle terakhir menunjukkan kenaikan bertahap tanpa volume spike, mengindikasikan momentum bullish masih berlanjut, bukan reversal. Oleh karena itu, sinyal short tidak layak dieksekusi.
+2026-05-28 20:34:59,148 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 20:39:59,174 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 20:44:59,136 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 20:49:59,125 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 20:54:59,099 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 20:59:59,187 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 21:04:59,097 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 21:09:59,232 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 21:14:59,066 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 21:19:59,041 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 21:24:59,018 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 21:29:59,027 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 21:34:59,167 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 21:39:58,980 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 21:44:59,084 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 21:49:59,018 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 21:54:59,652 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 21:59:59,010 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 22:04:59,356 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 22:09:58,954 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 22:14:59,097 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 22:19:58,928 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 22:24:58,887 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 22:29:58,876 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 22:34:58,862 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 22:39:58,743 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 22:44:58,738 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 22:49:58,833 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 22:54:58,708 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 22:59:58,730 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 23:04:58,752 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 23:09:58,792 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 23:14:58,868 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 23:19:58,769 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 23:24:58,736 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 23:29:58,743 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 23:34:58,739 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 23:39:58,708 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 23:44:58,863 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 23:49:58,623 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 23:54:58,668 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-28 23:59:58,739 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 00:04:58,672 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 00:09:58,696 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 00:14:58,628 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 00:19:58,597 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 00:24:58,638 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 00:29:58,628 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 00:34:58,594 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 00:39:58,592 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 00:44:58,558 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 00:49:58,563 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 00:54:58,541 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 00:59:58,533 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 01:04:59,118 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 01:09:58,476 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 01:14:58,491 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 01:19:58,467 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 01:24:58,759 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 01:29:58,492 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 01:34:58,413 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 01:39:58,319 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 01:44:58,320 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 01:49:58,280 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 01:54:58,400 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 01:59:58,395 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 02:04:58,363 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 02:09:58,328 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 02:14:58,548 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 02:19:58,332 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 02:24:58,229 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 02:29:58,433 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 02:34:58,207 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 02:39:58,207 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 02:43:40,070 [INFO] 📰 Kalender Ekonomi (USD/CNY High Impact) diperbarui: 2 jadwal minggu ini.
+2026-05-29 02:44:58,179 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 02:49:58,317 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 02:54:58,188 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 02:59:58,164 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 03:04:58,125 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 03:09:58,097 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 03:14:58,156 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 03:19:58,121 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 03:24:58,180 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 03:29:58,431 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 03:34:58,074 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 03:39:58,071 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 03:44:58,079 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 03:49:58,055 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 03:54:58,057 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 03:59:58,201 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 04:04:58,059 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 04:09:58,035 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 04:14:57,981 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 04:19:57,994 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 04:24:57,984 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 04:29:57,920 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 04:34:57,969 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 04:39:57,919 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 04:44:57,913 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 04:49:57,895 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 04:54:57,833 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 04:59:57,885 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 05:04:57,966 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 05:09:58,017 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 05:14:58,101 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 05:19:57,930 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 05:24:57,858 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 05:29:57,980 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 05:34:57,764 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 05:39:57,753 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 05:44:57,754 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 05:49:57,808 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 05:54:57,840 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 05:59:57,894 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 06:04:58,070 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 06:09:57,756 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 06:14:57,812 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 06:19:57,733 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 06:24:57,752 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 06:29:57,729 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 06:34:57,703 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 06:39:57,776 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 06:44:57,786 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 06:49:57,674 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 06:54:57,657 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 06:59:58,795 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 07:04:57,649 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 07:09:57,618 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 07:14:57,595 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 07:19:57,585 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 07:24:57,601 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 07:29:57,623 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 07:34:57,489 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 07:39:57,443 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 07:44:57,464 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 07:49:57,407 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 07:54:57,555 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 07:59:57,436 [INFO] 📊 Posisi masih terbuka. Menjalankan trailing stop management.
+2026-05-29 08:00:25,276 [INFO] 🚀 Memulai Scalp BTC Bot...
+2026-05-29 08:00:26,053 [INFO] Live Trader diinisialisasi. Saldo awal: 4.98903845 USDT
+2026-05-29 08:00:26,168 [INFO] 📊 Posisi terbuka terdeteksi saat startup. Menunggu posisi tertutup...
+2026-05-29 08:00:27,205 [INFO] 📰 Kalender Ekonomi (USD/CNY High Impact) diperbarui: 2 jadwal minggu ini.
+2026-05-29 08:00:29,067 [INFO] Memuat data historis untuk kalkulasi awal...
+2026-05-29 08:00:29,408 [INFO] Memulai stream kline 1m...
+2026-05-29 08:00:29,413 [INFO] Memulai stream kline 5m...
+2026-05-29 08:00:29,414 [INFO] Memulai stream kline 15m...
+2026-05-29 08:00:29,415 [INFO] Memulai depth stream untuk kalkulasi OFI...

@@ -41,14 +41,14 @@ def main():
         print("ℹ️ Tidak ada trade yang tereksekusi selama periode ini.")
         return
         
-    # --- Kalkulasi Metrik dengan Modal Awal $600 ---
-    START_BALANCE = 600.0
+    # --- Kalkulasi Metrik dengan Modal Awal $1000 ---
+    START_BALANCE = 1000.0
     current_balance = START_BALANCE
     
     # Override risk pct khusus untuk simulasi ini
-    SIMULATED_RISK_PCT = 0.01  # 1% per trade (STANDAR AMAN)
+    SIMULATED_RISK_PCT = 0.02  # 2% per trade
     SIMULATED_RRR = RRR_TP1
-    TAKER_FEE_RATE = 0.0002  # 0.02% MAKER FEE (Limit Order)
+    TAKER_FEE_RATE = 0.00015  # 0.015% MAKER FEE (Hyperliquid)
     
     total_trades = len(trades)
     wins = 0
@@ -83,7 +83,7 @@ def main():
     total_pnl_pct = (total_pnl_usd / START_BALANCE) * 100
         
     print("\n" + "="*50)
-    print(f"📈 HASIL BACKTEST (30 HARI TERAKHIR) - MODAL $600 | RISIKO 1% | AI: ON | FEE 0.02%")
+    print(f"📈 HASIL BACKTEST (30 HARI TERAKHIR) - MODAL $1000 | RISIKO 2% | AI: ON | FEE 0.015% (Hyperliquid)")
     print("="*50)
     print(f"Modal Awal       : ${START_BALANCE:.2f}")
     print(f"Modal Akhir      : ${current_balance:.2f}")

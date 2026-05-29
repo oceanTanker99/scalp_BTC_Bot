@@ -116,6 +116,27 @@ class StrategyEngine:
         # Volume Spike
         is_volume_spike = volume > (volume_ma * VOLUME_SPIKE_MULTIPLIER)
 
+        # ── DeepSeek R1: Metrik Anti-Stop-Hunt (PSO) ─────────────────────────
+        avg_vol = volume_ma
+        
+        range_ht = current['high'] - current['low']
+        if range_ht > 0:
+            upper_wick_ratio = (current['high'] - max(current['open'], current['close'])) / range_ht
+            lower_wick_ratio = (min(current['open'], current['close']) - current['low']) / range_ht
+        else:
+            upper_wick_ratio = 0
+            lower_wick_ratio = 0
+            
+        is_bullish_candle = current['close'] > current['open']
+        is_bearish_candle = current['close'] < current['open']
+        
+        band_expanding = False
+        if len(df_5m) >= 2:
+            prev_candle = df_5m.iloc[-2]
+            prev_bandwidth = prev_candle[bbh_col] - prev_candle[bbl_col]
+            current_bandwidth = bbh - bbl
+            band_expanding = current_bandwidth > (prev_bandwidth * 1.05)
+
         # ── Perbaikan #5: BB Squeeze Detection ───────────────────────────────
         if bb_width < BB_SQUEEZE_THRESHOLD:
             reason = f"BB Squeeze (width={bb_width:.4f} < {BB_SQUEEZE_THRESHOLD})"
@@ -155,6 +176,29 @@ class StrategyEngine:
 
             if not (bb_touch and rsi_ok):
                 continue  # Trigger utama wajib ada
+
+            # ── Injeksi Filter PSO (DeepSeek R1) ────────────────────────────────
+            if direction == 'LONG':
+                # Rule 1: Pisau Jatuh Bearish
+                strong_bearish = (rsi < 28 and volume > avg_vol * 1.5 and is_bearish_candle and lower_wick_ratio < 0.3)
+                if strong_bearish:
+                    reject_reason = "PSO Filter (R1): Pisau Jatuh Bearish"
+                    continue
+                # Rule 2: BB Expansion Bearish
+                if (price < bbl) and band_expanding and (rsi < 30):
+                    reject_reason = "PSO Filter (R1): BB Expansion Bearish"
+                    continue
+            else:
+                # Rule 1: Pisau Jatuh Bullish
+                strong_bullish = (rsi > 72 and volume > avg_vol * 1.5 and is_bullish_candle and upper_wick_ratio < 0.3)
+                if strong_bullish:
+                    reject_reason = "PSO Filter (R1): Pisau Jatuh Bullish"
+                    continue
+                # Rule 2: BB Expansion Bullish
+                if (price > bbh) and band_expanding and (rsi > 70):
+                    reject_reason = "PSO Filter (R1): BB Expansion Bullish"
+                    continue
+            # ────────────────────────────────────────────────────────────────────
 
             # BB touch + RSI = 2 poin dasar
             score += 2
