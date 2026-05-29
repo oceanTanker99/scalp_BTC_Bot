@@ -123,6 +123,28 @@ class BacktestEngine:
             bb_width = (bbh - bbl) / price
             is_volume_spike = volume > (volume_ma * VOLUME_SPIKE_MULTIPLIER)
 
+            # ── DeepSeek R1: Metrik Anti-Stop-Hunt (PSO) ─────────────────────────
+            avg_vol = volume_ma
+            
+            range_ht = row['high'] - row['low']
+            if range_ht > 0:
+                upper_wick_ratio = (row['high'] - max(row['open'], row['close'])) / range_ht
+                lower_wick_ratio = (min(row['open'], row['close']) - row['low']) / range_ht
+            else:
+                upper_wick_ratio = 0
+                lower_wick_ratio = 0
+                
+            is_bullish_candle = row['close'] > row['open']
+            is_bearish_candle = row['close'] < row['open']
+            
+            band_expanding = False
+            loc = df_5m.index.get_loc(idx)
+            if loc >= 1:
+                prev_row = df_5m.iloc[loc - 1]
+                prev_bandwidth = prev_row[bbh_col] - prev_row[bbl_col]
+                current_bandwidth = bbh - bbl
+                band_expanding = current_bandwidth > (prev_bandwidth * 1.05)
+
             # OFI tidak tersedia di backtest (butuh data orderbook tick-level)
             # Asumsi netral: skor 0 dari OFI untuk konservatif
             ofi_ok = False
@@ -150,6 +172,22 @@ class BacktestEngine:
 
                 if not (bb_touch and rsi_ok):
                     continue
+
+                # ── Injeksi Filter PSO (DeepSeek R1) ────────────────────────────────
+                if direction == 'LONG':
+                    strong_bearish = (rsi < 28 and volume > avg_vol * 1.5 and is_bearish_candle and lower_wick_ratio < 0.3)
+                    if strong_bearish:
+                        continue
+                    if (price < bbl) and band_expanding and (rsi < 30):
+                        continue
+                else:
+                    strong_bullish = (rsi > 72 and volume > avg_vol * 1.5 and is_bullish_candle and upper_wick_ratio < 0.3)
+                    if strong_bullish:
+                        continue
+                    if (price > bbh) and band_expanding and (rsi > 70):
+                        continue
+                # ────────────────────────────────────────────────────────────────────
+
                 score += 2
 
                 if macro_ok:
