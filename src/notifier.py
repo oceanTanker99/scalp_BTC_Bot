@@ -1,14 +1,14 @@
 import logging
 import aiohttp
-from config.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from config.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS
 
 log = logging.getLogger(__name__)
 
 class TelegramNotifier:
     def __init__(self):
         self.token = TELEGRAM_BOT_TOKEN
-        self.chat_id = TELEGRAM_CHAT_ID
-        self.enabled = bool(self.token and self.chat_id)
+        self.chat_ids = TELEGRAM_CHAT_IDS
+        self.enabled = bool(self.token and self.chat_ids)
         if not self.enabled:
             log.warning("Notifikasi Telegram dinonaktifkan: TOKEN atau CHAT_ID tidak ditemukan.")
 
@@ -16,12 +16,13 @@ class TelegramNotifier:
         if not self.enabled:
             return
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"
-        payload = {"chat_id": self.chat_id, "text": message, "parse_mode": "HTML"}
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    if resp.status != 200:
-                        log.error(f"Gagal mengirim pesan Telegram: {resp.status}")
+                for chat_id in self.chat_ids:
+                    payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
+                    async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                        if resp.status != 200:
+                            log.error(f"Gagal mengirim pesan Telegram ke {chat_id}: {resp.status}")
         except Exception as e:
             log.error(f"Error Telegram: {e}")
 

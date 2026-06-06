@@ -8,9 +8,9 @@ from src.ai_analyzer import DeepSeekValidator
 from config.config import (
     BOLLINGER_PERIOD, BOLLINGER_STD, RSI_PERIOD, RSI_OVERSOLD, RSI_OVERBOUGHT,
     TRADE_START_HOUR_UTC, TRADE_END_HOUR_UTC, ATR_PERIOD, ATR_MULTIPLIER,
-    EMA_MTF_PERIOD, ADX_PERIOD, ADX_THRESHOLD, OFI_BOOST_THRESHOLD,
-    VOLUME_SPIKE_MULTIPLIER, BB_SQUEEZE_THRESHOLD, MIN_SIGNAL_SCORE,
-    BREAK_EVEN_TRIGGER_PCT, COOLDOWN_CANDLES, RRR_TP1
+    EMA_MTF_PERIOD, ADX_PERIOD, ADX_THRESHOLD, STRONG_TREND_ADX,
+    MIN_SIGNAL_SCORE, COOLDOWN_CANDLES, MIN_BB_WIDTH_MR, MIN_BB_WIDTH_TF,
+    BREAK_EVEN_TRIGGER_PCT, RRR_TP1, VOLUME_SPIKE_MULTIPLIER, OFI_BOOST_THRESHOLD
 )
 
 log = logging.getLogger(__name__)
@@ -26,8 +26,9 @@ class BacktestEngine:
 
         # --- Indikator 15M ---
         df_15m['ema_200'] = ta.ema(df_15m['close'], length=EMA_MTF_PERIOD)
-        # Bawa EMA 200 ke 5M via merge_asof
-        df_15m_aligned = df_15m[['timestamp', 'ema_200']].copy()
+        df_15m['ema_800'] = ta.ema(df_15m['close'], length=800)
+        # Bawa EMA 200 & EMA 800 ke 5M via merge_asof
+        df_15m_aligned = df_15m[['timestamp', 'ema_200', 'ema_800']].copy()
         df_5m = pd.merge_asof(
             df_5m.sort_values('timestamp'),
             df_15m_aligned.sort_values('timestamp'),
@@ -70,7 +71,10 @@ class BacktestEngine:
 
         bbl_col = [col for col in df_5m.columns if col.startswith('BBL_')][0]
         bbh_col = [col for col in df_5m.columns if col.startswith('BBU_')][0]
+        bbm_col = [col for col in df_5m.columns if col.startswith('BBM_')][0]
         adx_col = [col for col in df_5m.columns if col.startswith('ADX_')][0]
+        dmp_col = [col for col in df_5m.columns if col.startswith('DMP_')][0]
+        dmn_col = [col for col in df_5m.columns if col.startswith('DMN_')][0]
 
         in_position = False
         cooldown_counter = COOLDOWN_CANDLES  # Mulai siap trading
@@ -113,9 +117,13 @@ class BacktestEngine:
             rsi = row['rsi']
             bbl = row[bbl_col]
             bbh = row[bbh_col]
+            bbm = row[bbm_col]
             adx = row[adx_col]
+            dmp = row[dmp_col]
+            dmn = row[dmn_col]
             atr = row['atr']
             ema_200 = row['ema_200']
+            ema_800 = row['ema_800']
             volume = row['volume']
             volume_ma = row['volume_ma']
             ts = row['timestamp']
@@ -149,7 +157,7 @@ class BacktestEngine:
             # Asumsi netral: skor 0 dari OFI untuk konservatif
             ofi_ok = False
 
-            if bb_width < BB_SQUEEZE_THRESHOLD or adx > ADX_THRESHOLD:
+            if bb_width < MIN_BB_WIDTH_MR:
                 continue
 
             is_bullish_macro = price > ema_200
@@ -160,47 +168,99 @@ class BacktestEngine:
 
             long_rsi_ok = rsi < RSI_OVERSOLD
             short_rsi_ok = rsi > RSI_OVERBOUGHT
+            
+            # ── DUAL-ENGINE: Regime Detection (Triple Confirmation) ───────────────
+            is_trending_bull = False
+            is_trending_bear = False
+            dist_ema800_pct = (price - ema_800) / ema_800 * 100
+            dist_ema200_pct = (price - ema_200) / ema_200 * 100
+            
+            if adx > STRONG_TREND_ADX and bb_width > MIN_BB_WIDTH_TF:
+                if dist_ema800_pct > 1.5 and dmp > dmn + 10:
+                    is_trending_bull = True
+                elif dist_ema800_pct < -1.5 and dmn > dmp + 10:
+                    is_trending_bear = True
+                    
+            strategy_type = "MEAN_REVERSION"
+            if is_trending_bull or is_trending_bear:
+                strategy_type = "TREND_FOLLOWING"
 
             signal = None
             score = 0
-
-            for direction in ['LONG', 'SHORT']:
-                score = 0
-                bb_touch = long_bb_touch if direction == 'LONG' else short_bb_touch
-                rsi_ok = long_rsi_ok if direction == 'LONG' else short_rsi_ok
-                macro_ok = is_bullish_macro if direction == 'LONG' else is_bearish_macro
-
-                if not (bb_touch and rsi_ok):
+            
+            if strategy_type == "MEAN_REVERSION":
+                # ML Constraint: Tolak jika ADX > 30 atau BB Width < 0.5%
+                if adx > ADX_THRESHOLD:
+                    continue
+                if bb_width < MIN_BB_WIDTH_MR:
                     continue
 
-                # ── Injeksi Filter PSO (DeepSeek R1) ────────────────────────────────
-                if direction == 'LONG':
-                    strong_bearish = (rsi < 28 and volume > avg_vol * 1.5 and is_bearish_candle and lower_wick_ratio < 0.3)
-                    if strong_bearish:
+                for direction in ['LONG', 'SHORT']:
+                    score = 0
+                    bb_touch = long_bb_touch if direction == 'LONG' else short_bb_touch
+                    rsi_ok = long_rsi_ok if direction == 'LONG' else short_rsi_ok
+                    macro_ok = is_bullish_macro if direction == 'LONG' else is_bearish_macro
+    
+                    if not (bb_touch and rsi_ok):
                         continue
-                    if (price < bbl) and band_expanding and (rsi < 30):
+    
+                    # ── Injeksi Filter PSO (DeepSeek ML) ────────────────────────────────
+                    pso_rejected = False
+                    
+                    if direction == 'LONG':
+                        strong_bearish = (rsi < 28 and volume > avg_vol * 1.5 and is_bearish_candle and lower_wick_ratio < 0.3)
+                        if strong_bearish:
+                            pso_rejected = True
+                        elif (price < bbl) and band_expanding and (rsi < 30):
+                            pso_rejected = True
+                    else:
+                        strong_bullish = (rsi > 72 and volume > avg_vol * 1.5 and is_bullish_candle and upper_wick_ratio < 0.3)
+                        if strong_bullish:
+                            pso_rejected = True
+                        elif (price > bbh) and band_expanding and (rsi > 70):
+                            pso_rejected = True
+                                
+                    if pso_rejected:
                         continue
-                else:
-                    strong_bullish = (rsi > 72 and volume > avg_vol * 1.5 and is_bullish_candle and upper_wick_ratio < 0.3)
-                    if strong_bullish:
-                        continue
-                    if (price > bbh) and band_expanding and (rsi > 70):
-                        continue
-                # ────────────────────────────────────────────────────────────────────
-
-                score += 2
-
-                if macro_ok:
-                    score += 1
-                else:
-                    continue
-
-                if is_volume_spike:
-                    score += 1
-
-                if score >= MIN_SIGNAL_SCORE:
-                    signal = direction
-                    break
+                    # ────────────────────────────────────────────────────────────────────
+    
+                    score += 2
+                    if macro_ok: score += 1
+                    else: continue
+                    if is_volume_spike: score += 1
+    
+                    if score >= MIN_SIGNAL_SCORE:
+                        signal = direction
+                        break
+            else: # TREND_FOLLOWING
+                for direction in ['LONG', 'SHORT']:
+                    score = 0
+                    if direction == 'LONG' and is_trending_bull:
+                        bbm_touch = price <= bbm * 1.002 and price >= bbm * 0.998
+                        breakout = price > bbh and is_volume_spike
+                        
+                        if bbm_touch or breakout:
+                            score += 2
+                            # OFI assumed 0 (False), so no points here
+                            if rsi < 70: score += 1
+                            if price > row['vwap']: score += 1
+                            
+                            # MIN_SIGNAL_SCORE is 4. In backtest, max score here is 4. So it will trigger!
+                            if score >= MIN_SIGNAL_SCORE:
+                                signal = 'LONG'
+                                break
+                    elif direction == 'SHORT' and is_trending_bear:
+                        bbm_touch = price >= bbm * 0.998 and price <= bbm * 1.002
+                        breakout = price < bbl and is_volume_spike
+                        
+                        if bbm_touch or breakout:
+                            score += 2
+                            if rsi > 30: score += 1
+                            if price < row['vwap']: score += 1
+                            
+                            if score >= MIN_SIGNAL_SCORE:
+                                signal = 'SHORT'
+                                break
 
             if signal:
                 if use_ai:
@@ -214,6 +274,10 @@ class BacktestEngine:
                         'price_vs_vwap_pct': round(((price - row['vwap']) / row['vwap']) * 100, 2),
                         'ema_200_15m': ema_200,
                         'price_vs_ema200_pct': round(((price - ema_200) / ema_200) * 100, 2),
+                        'ema_800_15m': ema_800,
+                        'strategy_type': strategy_type,
+                        'dmp': round(dmp, 2),
+                        'dmn': round(dmn, 2),
                         'adx': adx,
                         'atr': atr,
                         'atr_pct': round((atr / price) * 100, 2),

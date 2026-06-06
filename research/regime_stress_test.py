@@ -3,6 +3,7 @@ import pandas as pd
 from binance.client import Client
 from src.backtester.engine import BacktestEngine
 from config.config import RRR_TP1
+from datetime import datetime, timedelta
 
 def fetch_period_data(symbol, start_str, end_str, output_prefix):
     client = Client()
@@ -46,11 +47,14 @@ def run_stress_test(name, start_str, end_str):
     print(f"{'='*60}")
     
     # Pad 5 hari ke belakang untuk pemanasan EMA200 (200 * 15m = 50 jam = ~2.1 hari)
-    # Start date string example: "1 Apr, 2025" -> let's just use "26 Mar, 2025" for fetching
-    # and filter it inside the engine? BacktestEngine starts trading when EMA200 is available anyway.
-    
-    pad_start_str = "25 Mar, 2025" if "Apr, 2025" in start_str else "25 Jan, 2025"
-    if "Feb, 2025" in start_str: pad_start_str = "25 Jan, 2025"
+    try:
+        start_dt = datetime.strptime(start_str, "%d %b, %Y")
+    except ValueError:
+        # Fallback if format is different
+        start_dt = pd.to_datetime(start_str)
+        
+    pad_dt = start_dt - timedelta(days=6)
+    pad_start_str = pad_dt.strftime("%d %b, %Y")
     
     files = fetch_period_data("BTCUSDT", pad_start_str, end_str, name.replace(" ", "_"))
     
@@ -73,7 +77,7 @@ def run_stress_test(name, start_str, end_str):
 def print_results(name, trades_math, trades_ai):
     START_BALANCE = 1000.0
     RISK_PCT = 0.02
-    FEE = 0.00015 * 2
+    FEE = 0.0002 * 2 # Binance fee (0.02% per side)
     
     def calc_stats(trades):
         balance = START_BALANCE
@@ -83,6 +87,8 @@ def print_results(name, trades_math, trades_ai):
             risk = balance * RISK_PCT
             pos_size = risk / t['sl_distance']
             trade_fee = pos_size * FEE
+            t['pos_size'] = pos_size
+            t['risk_usd'] = risk
             t['profit_usd'] = (risk * RRR_TP1) - trade_fee if res == 'WIN' else (-trade_fee if res == 'BE' else -(risk + trade_fee))
             
             if res == 'WIN':
@@ -100,18 +106,72 @@ def print_results(name, trades_math, trades_ai):
     bm, wm, lm, bem = calc_stats(trades_math)
     ba, wa, la, bea = calc_stats(trades_ai)
     
-    # Save to CSV
+    def format_journal(trades, filename):
+        if not trades:
+            return
+        
+        journal_data = []
+        for i, t in enumerate(trades):
+            entry_time = pd.to_datetime(t['entry_ts'], unit='ms').strftime('%Y-%m-%d %H:%M')
+            
+            # SL & TP Calculation
+            if t['signal'] == 'LONG':
+                sl = t['entry_price'] - t['sl_distance']
+                tp = t['entry_price'] + (t['sl_distance'] * RRR_TP1)
+            else:
+                sl = t['entry_price'] + t['sl_distance']
+                tp = t['entry_price'] - (t['sl_distance'] * RRR_TP1)
+            
+            # P&L (R)
+            if t['result'] == 'WIN': pnl_r = RRR_TP1
+            elif t['result'] == 'LOSS': pnl_r = -1
+            else: pnl_r = 0
+            
+            # Catatan Exit
+            if t['result'] == 'WIN': exit_note = "Hit TP"
+            elif t['result'] == 'LOSS': exit_note = "Hit SL"
+            else: exit_note = "Hit BE (Trailing Stop)"
+
+            # Kualitas & Alasan (Parse AI Reasoning if exists)
+            kualitas = "N/A"
+            alasan = "Technical Setup"
+            if t['ai_reasoning']:
+                if "SCORE:" in t['ai_reasoning']:
+                    try:
+                        kualitas = t['ai_reasoning'].split("SCORE:")[1].split("/")[0].strip()
+                    except: pass
+                alasan = t['ai_reasoning'][:200].replace('\n', ' ') + "..." # Truncate long reasons
+
+            journal_data.append({
+                '#': i + 1,
+                'Tanggal': entry_time,
+                'Pair': "BTC/USDT",
+                'TF': "5m",
+                'Arah': t['signal'],
+                'Harga Entry': round(t['entry_price'], 2),
+                'Stop Loss': round(sl, 2),
+                'Take Profit': round(tp, 2),
+                'Jarak SL (R)': round(t['sl_distance'], 2),
+                'R:R Ratio': RRR_TP1,
+                'Ukuran Posisi': round(t.get('pos_size', 0), 4),
+                'Risk ($)': round(t.get('risk_usd', 0), 2),
+                'Harga Exit': round(t['exit_price'], 2),
+                'Hasil': t['result'],
+                'P&L ($)': round(t['profit_usd'], 2),
+                'P&L (R)': pnl_r,
+                'Kualitas': kualitas,
+                'Setup / Alasan Entry': alasan,
+                'Catatan Exit': exit_note
+            })
+            
+        df = pd.DataFrame(journal_data)
+        df.to_csv(filename, index=False)
+        return df
+
+    # Save to CSV in requested Journal Format
     os.makedirs('logs', exist_ok=True)
-    if trades_math:
-        df_m = pd.DataFrame(trades_math)
-        df_m['entry_time'] = pd.to_datetime(df_m['entry_ts'], unit='ms')
-        df_m['exit_time'] = pd.to_datetime(df_m['exit_ts'], unit='ms')
-        df_m.to_csv(f"logs/{name}_math_trades.csv", index=False)
-    if trades_ai:
-        df_a = pd.DataFrame(trades_ai)
-        df_a['entry_time'] = pd.to_datetime(df_a['entry_ts'], unit='ms')
-        df_a['exit_time'] = pd.to_datetime(df_a['exit_ts'], unit='ms')
-        df_a.to_csv(f"logs/{name}_ai_trades.csv", index=False)
+    df_m = format_journal(trades_math, f"logs/{name}_math_journal.csv")
+    df_a = format_journal(trades_ai, f"logs/{name}_ai_journal.csv")
     
     print(f"\n📊 HASIL AKHIR: {name}")
     print(f"--- MURNI MATEMATIKA (FILTER R1) ---")
@@ -123,5 +183,11 @@ def print_results(name, trades_math, trades_ai):
     print(f"Trade: {len(trades_ai)} (W:{wa} L:{la} BE:{bea})")
     
 if __name__ == "__main__":
-    # Rezim Bullish Agresif (April 2025)
-    run_stress_test("BULLISH_AGRESIF", "1 Apr, 2025", "30 Apr, 2025")
+    # 2 Bulan Terakhir
+    regimes = [
+        ("2_MONTH_AI_BACKTEST", "06 Apr, 2026", "06 Jun, 2026")
+    ]
+    
+    for name, start, end in regimes:
+        run_stress_test(name, start, end)
+

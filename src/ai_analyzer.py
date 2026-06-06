@@ -40,14 +40,38 @@ class DeepSeekValidator:
                         if c in df_5m.columns]
         recent_candles = df_5m.tail(8)[cols_to_show].round(2).to_dict(orient='records')
 
-        # Tentukan zona harga relatif
         price_zone = "Di atas VWAP" if ctx.get('price_vs_vwap_pct', 0) > 0 else "Di bawah VWAP"
         macro_zone = ("Di atas EMA 200 (Bullish Makro)" if ctx.get('price_vs_ema200_pct', 0) > 0
                       else "Di bawah EMA 200 (Bearish Makro)")
-
-        prompt = f"""Anda adalah Quant Trader institusional yang menggunakan strategi Mean-Reversion.
+        strategy_type = ctx.get('strategy_type', 'MEAN_REVERSION')
+        
+        if strategy_type == 'MEAN_REVERSION':
+            strategy_instruction = """Anda adalah Quant Trader institusional beraliran MEAN-REVERSION (Pemulihan ke Rata-Rata).
 Bot telah mendeteksi sinyal potensial: **{signal}** di grafik 5 Menit BTC/USDT.
+Harga saat ini sedang berada di luar batas wajar (Bollinger Bands) dan ada potensi memantul kembali ke tengah.
+            """
+            evaluation_instruction = """
+Pertimbangkan:
+1. Sentimen Derivatives: Apakah Funding Rate terlalu berlawanan? Apakah Top Traders sedang berada di sisi yang berlawanan dengan sinyal ini? (Misal: Sinyal Long tapi Top L/S < 0.95, artinya paus sedang nge-Short).
+2. Apakah harga benar-benar sudah "terlalu jauh dari equilibrium" (VWAP/EMA 200) dan siap memantul?
+3. Apakah aksi harga di 8 candle terakhir mendukung atau menentang potensi reversal?
+4. Apakah ada tanda-tanda momentum berlanjut (bearish engulfing, volume terus naik saat turun) yang menunjukkan ini BUKAN reversal tapi continuation?
+            """
+        else:
+            strategy_instruction = """Anda adalah Quant Trader institusional beraliran TREND-FOLLOWING (Pengikut Tren).
+Bot telah mendeteksi sinyal potensial: **{signal}** di grafik 5 Menit BTC/USDT.
+Pasar sedang berada dalam tren MAHA KUAT (Dikonfirmasi oleh ADX, DMI, dan Jarak Makro EMA 800).
+Ini adalah setup "Buy on Dip" (Pullback ke garis EMA 20) atau "Breakout" searah dengan tren makro.
+            """
+            evaluation_instruction = """
+Pertimbangkan:
+1. Sentimen Derivatives: Apakah mayoritas ritel melawan tren ini (Funding Rate sangat negatif tapi harga naik terus)? Jika ya, itu bensin tambahan untuk trend.
+2. Pullback/Breakout: Apakah volume mengering saat harga pullback (konsolidasi sehat), dan siap melonjak lagi?
+3. Jangan takut untuk menyetujui sinyal jika harga memang sedang pullback dangkal di tengah tren yang sangat kuat.
+4. Tolak jika ada pola pembalikan arah skala besar (misal: Head and Shoulders, volume buang barang raksasa di pucuk).
+            """
 
+        prompt = f"""{strategy_instruction}
 ═══ DATA SENTIMEN DERIVATIVES (BINANCE) ═══
 Funding Rate          : {sent.get('funding_rate', 0)*100:.4f}%
 Open Interest         : {sent.get('open_interest', 0):,.0f}
@@ -55,13 +79,16 @@ Top L/S Ratio (Paus)  : {sent.get('top_long_short_ratio', 1.0):.2f} ( >1: Banyak
 Global L/S Ratio      : {sent.get('global_long_short_ratio', 1.0):.2f}
 
 ═══ SNAPSHOT INDIKATOR SAAT INI ═══
+Tipe Strategi  : {strategy_type}
 Harga          : {ctx.get('price', 'N/A')} USDT
-RSI (7)        : {ctx.get('rsi', 'N/A')} {'🟢 Oversold' if signal == 'LONG' else '🔴 Overbought'}
+RSI (7)        : {ctx.get('rsi', 'N/A')}
 Bollinger Low  : {ctx.get('bbl', 'N/A')} | Bollinger High: {ctx.get('bbh', 'N/A')}
-BB Width       : {ctx.get('bb_width_pct', 'N/A')}% {'(Sempit/Squeeze)' if ctx.get('bb_width_pct', 99) < 2 else '(Normal/Melebar)'}
+BB Width       : {ctx.get('bb_width_pct', 'N/A')}%
 VWAP (Harian)  : {ctx.get('vwap', 'N/A')} → Harga {price_zone} ({ctx.get('price_vs_vwap_pct', 'N/A')}%)
 EMA 200 (15m)  : {ctx.get('ema_200_15m', 'N/A')} → {macro_zone} ({ctx.get('price_vs_ema200_pct', 'N/A')}%)
-ADX (Tren)     : {ctx.get('adx', 'N/A')} {'(Tren Lemah ✓)' if ctx.get('adx', 99) < 25 else '(Tren Kuat ⚠️)'}
+EMA 800 (15m)  : {ctx.get('ema_800_15m', 'N/A')} (Macro Baseline)
+ADX (Tren)     : {ctx.get('adx', 'N/A')} (Tren Kuat jika > 25)
+DMI (+DI/-DI)  : +DI {ctx.get('dmp', 'N/A')} | -DI {ctx.get('dmn', 'N/A')}
 ATR Volatilitas: {ctx.get('atr', 'N/A')} ({ctx.get('atr_pct', 'N/A')}% dari harga)
 OFI Orderbook  : {ofi:.2f} {'(Dominasi Beli ✓)' if ofi > 0 else '(Dominasi Jual)'}
 Volume Spike   : {'YA 🔥' if ctx.get('volume_spike') else 'Tidak'}
@@ -71,16 +98,12 @@ Skor Sinyal    : {ctx.get('score', 'N/A')}/5
 {json.dumps(recent_candles, indent=2)}
 
 ═══ TUGAS ANDA ═══
-Berdasarkan seluruh data di atas, tentukan apakah sinyal **{signal}** ini layak dieksekusi sebagai trade Mean-Reversion.
-Pertimbangkan:
-1. Sentimen Derivatives: Apakah Funding Rate terlalu berlawanan? Apakah Top Traders sedang berada di sisi yang berlawanan dengan sinyal ini? (Misal: Sinyal Long tapi Top L/S < 0.95, artinya paus sedang nge-Short).
-2. Apakah harga benar-benar sudah "terlalu jauh dari equilibrium" (VWAP/EMA 200) dan siap memantul?
-3. Apakah aksi harga di 8 candle terakhir mendukung atau menentang potensi reversal?
-4. Apakah ada tanda-tanda momentum berlanjut (bearish engulfing, volume terus naik saat turun) yang menunjukkan ini BUKAN reversal tapi continuation?
+Berdasarkan seluruh data di atas, tentukan apakah sinyal **{signal}** ini layak dieksekusi.
+{evaluation_instruction}
 
 Jawab HANYA dengan format JSON berikut, tanpa teks lain:
 {{
-  "reasoning": "analisis Anda dalam 2-3 kalimat yang mencakup sentimen, price action, dan konteks makro",
+  "reasoning": "analisis Anda dalam 2-3 kalimat yang mencakup sentimen, price action, dan kecocokan dengan {strategy_type}",
   "approved": true atau false
 }}"""
 

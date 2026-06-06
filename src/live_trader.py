@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import time
 from binance import AsyncClient
 from binance.exceptions import BinanceAPIException
 from config.config import (
@@ -33,6 +34,17 @@ class LiveTrader:
             self.client = await AsyncClient.create(
                 BINANCE_API_KEY, BINANCE_SECRET_KEY, testnet=BINANCE_TESTNET
             )
+        
+        # Sync time with Binance Server to prevent Timestamp APIError (-1021)
+        try:
+            res = await self.client.futures_time()
+            server_time = res['serverTime']
+            local_time = int(time.time() * 1000)
+            self.client.timestamp_offset = server_time - local_time
+            log.info(f"Waktu disinkronkan dengan Binance. Offset: {self.client.timestamp_offset} ms")
+        except Exception as e:
+            log.error(f"Gagal sinkronisasi waktu Binance: {e}")
+
         await self._set_leverage()
         self.start_balance = await self.get_balance()
         log.info(f"Live Trader diinisialisasi. Saldo awal: {self.start_balance} USDT")

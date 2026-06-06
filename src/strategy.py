@@ -7,8 +7,9 @@ import os
 from config.config import (
     BOLLINGER_PERIOD, BOLLINGER_STD, RSI_PERIOD, RSI_OVERSOLD, RSI_OVERBOUGHT,
     TRADE_START_HOUR_UTC, TRADE_END_HOUR_UTC, ATR_PERIOD, ATR_MULTIPLIER,
-    EMA_MTF_PERIOD, ADX_PERIOD, ADX_THRESHOLD, OFI_BOOST_THRESHOLD,
-    VOLUME_SPIKE_MULTIPLIER, BB_SQUEEZE_THRESHOLD, MIN_SIGNAL_SCORE
+    EMA_MTF_PERIOD, ADX_PERIOD, ADX_THRESHOLD, STRONG_TREND_ADX, OFI_BOOST_THRESHOLD,
+    VOLUME_SPIKE_MULTIPLIER, MIN_BB_WIDTH_MR, MIN_BB_WIDTH_TF,
+    MIN_SIGNAL_SCORE
 )
 
 log = logging.getLogger(__name__)
@@ -64,9 +65,10 @@ class StrategyEngine:
         if atr_series is not None:
             df_5m['atr'] = atr_series
 
-        # EMA 200 di 15m (Macro Trend)
+        # EMA 200 & EMA 800 di 15m (Macro Trend)
         df_15m = df_15m.copy()
         df_15m['ema_200'] = ta.ema(df_15m['close'], length=EMA_MTF_PERIOD)
+        df_15m['ema_800'] = ta.ema(df_15m['close'], length=800)
 
         # VWAP dengan Daily Reset (00:00 UTC)
         df_5m['date_utc'] = pd.to_datetime(df_5m['timestamp'], unit='ms', utc=True).dt.date
@@ -87,12 +89,15 @@ class StrategyEngine:
 
         bbl_col = [col for col in df_5m.columns if col.startswith('BBL_')][0]
         bbh_col = [col for col in df_5m.columns if col.startswith('BBU_')][0]
+        bbm_col = [col for col in df_5m.columns if col.startswith('BBM_')][0]
         adx_col = [col for col in df_5m.columns if col.startswith('ADX_')][0]
+        dmp_col = [col for col in df_5m.columns if col.startswith('DMP_')][0]
+        dmn_col = [col for col in df_5m.columns if col.startswith('DMN_')][0]
 
-        required_cols = [bbl_col, bbh_col, adx_col, 'rsi', 'atr', 'vwap', 'volume_ma']
+        required_cols = [bbl_col, bbh_col, bbm_col, adx_col, dmp_col, dmn_col, 'rsi', 'atr', 'vwap', 'volume_ma']
         if any(col not in df_5m.columns or pd.isna(current.get(col, float('nan'))) for col in required_cols):
             return "NEUTRAL", current['close'], 0.0, {}
-        if pd.isna(current_15m['ema_200']):
+        if pd.isna(current_15m['ema_200']) or pd.isna(current_15m['ema_800']):
             return "NEUTRAL", current['close'], 0.0, {}
 
         price       = current['close']
@@ -103,6 +108,10 @@ class StrategyEngine:
         atr         = current['atr']
         vwap        = current['vwap']
         ema_200     = current_15m['ema_200']
+        ema_800     = current_15m['ema_800']
+        dmp         = current[dmp_col]
+        dmn         = current[dmn_col]
+        bbm         = current[bbm_col]
         volume      = current['volume']
         volume_ma   = current['volume_ma']
 
@@ -172,8 +181,8 @@ class StrategyEngine:
             )
 
         # ── Perbaikan #5: BB Squeeze Detection ───────────────────────────────
-        if bb_width < BB_SQUEEZE_THRESHOLD:
-            reason = f"BB Squeeze (width={bb_width:.4f} < {BB_SQUEEZE_THRESHOLD})"
+        if bb_width < MIN_BB_WIDTH_MR:
+            reason = f"BB Squeeze (width={bb_width:.4f} < {MIN_BB_WIDTH_MR})"
             self._log_csv(current, price, rsi, bbl, bbh, bb_width, vwap, adx,
                           ema_200, ofi, is_volume_spike, 0, "NEUTRAL (BB Squeeze)", sl_distance, reason)
             return "NEUTRAL", price, sl_distance, {}
@@ -189,89 +198,138 @@ class StrategyEngine:
         long_rsi_ok  = rsi < RSI_OVERSOLD    # RSI oversold (< 30)
         short_rsi_ok = rsi > RSI_OVERBOUGHT  # RSI overbought (> 70)
 
-        # ADX Filter (tren terlalu kuat = bukan lingkungan mean-reversion)
-        if adx > ADX_THRESHOLD:
-            reason = f"ADX Terlalu Tinggi ({adx:.1f} > {ADX_THRESHOLD})"
-            self._log_csv(current, price, rsi, bbl, bbh, bb_width, vwap, adx,
-                          ema_200, ofi, is_volume_spike, 0, f"NEUTRAL (ADX>{ADX_THRESHOLD})", sl_distance, reason)
-            return "NEUTRAL", price, sl_distance, {}
+        # ── DUAL-ENGINE: Regime Detection (Triple Confirmation) ───────────────
+        is_trending_bull = False
+        is_trending_bear = False
+        dist_ema800_pct = (price - ema_800) / ema_800 * 100
+        dist_ema200_pct = (price - ema_200) / ema_200 * 100
+        
+        if adx > STRONG_TREND_ADX and bb_width > MIN_BB_WIDTH_TF:
+            if dist_ema800_pct > 1.5 and dmp > dmn + 10:
+                is_trending_bull = True
+            elif dist_ema800_pct < -1.5 and dmn > dmp + 10:
+                is_trending_bear = True
+                
+        strategy_type = "MEAN_REVERSION"
+        if is_trending_bull or is_trending_bear:
+            strategy_type = "TREND_FOLLOWING"
 
-        # ── Perbaikan #3: Sistem Skor (mengganti OFI wajib) ──────────────────
         signal = "NEUTRAL"
         score = 0
         reject_reason = "Kondisi tidak terpenuhi"
 
-        for direction in ['LONG', 'SHORT']:
-            score = 0
-            bb_touch  = long_bb_touch  if direction == 'LONG' else short_bb_touch
-            rsi_ok    = long_rsi_ok    if direction == 'LONG' else short_rsi_ok
-            macro_ok  = is_bullish_macro if direction == 'LONG' else is_bearish_macro
-            ofi_ok    = ofi > OFI_BOOST_THRESHOLD if direction == 'LONG' else ofi < -OFI_BOOST_THRESHOLD
+        if strategy_type == "MEAN_REVERSION":
+            # ML Constraint: Tolak jika ADX > 30 atau BB Width < 0.5%
+            if adx > ADX_THRESHOLD:
+                reason = f"ADX Terlalu Tinggi ({adx:.1f} > {ADX_THRESHOLD})"
+                self._log_csv(current, price, rsi, bbl, bbh, bb_width, vwap, adx,
+                              ema_200, ofi, is_volume_spike, 0, f"NEUTRAL (ADX>{ADX_THRESHOLD})", sl_distance, reason)
+                return "NEUTRAL", price, sl_distance, {}
+            if bb_width < MIN_BB_WIDTH_MR:
+                reason = f"BB Width Sempit untuk MR ({bb_width*100:.2f}% < {MIN_BB_WIDTH_MR*100:.2f}%)"
+                self._log_csv(current, price, rsi, bbl, bbh, bb_width, vwap, adx,
+                              ema_200, ofi, is_volume_spike, 0, f"NEUTRAL (BBW<{MIN_BB_WIDTH_MR})", sl_distance, reason)
+                return "NEUTRAL", price, sl_distance, {}
 
-            if not (bb_touch and rsi_ok):
-                continue  # Trigger utama wajib ada
+            for direction in ['LONG', 'SHORT']:
+                score = 0
+                bb_touch  = long_bb_touch  if direction == 'LONG' else short_bb_touch
+                rsi_ok    = long_rsi_ok    if direction == 'LONG' else short_rsi_ok
+                macro_ok  = is_bullish_macro if direction == 'LONG' else is_bearish_macro
+                ofi_ok    = ofi > OFI_BOOST_THRESHOLD if direction == 'LONG' else ofi < -OFI_BOOST_THRESHOLD
 
-            # ── Injeksi Filter PSO & Pure Loss (DeepSeek R1) ────────────────────
-            if direction == 'LONG':
-                # Rule 1: False Mean Reversion (Pure Loss)
-                if is_false_mean_reversion_long:
-                    reject_reason = "Pure Loss Filter (R1): False Mean-Reversion Long"
+                if not (bb_touch and rsi_ok):
+                    continue  # Trigger utama wajib ada
+
+                # ── Injeksi Filter PSO & Pure Loss (DeepSeek ML) ────────────────────
+                pso_rejected = False
+                temp_reject_reason = ""
+                
+                if direction == 'LONG':
+                    if is_false_mean_reversion_long:
+                        pso_rejected = True
+                        temp_reject_reason = "Pure Loss Filter (R1): False Mean-Reversion Long"
+                    elif (rsi < 28 and volume > avg_vol * 1.5 and is_bearish_candle and lower_wick_ratio < 0.3):
+                        pso_rejected = True
+                        temp_reject_reason = "PSO Filter (R1): Pisau Jatuh Bearish"
+                    elif (price < bbl) and band_expanding and (rsi < 30):
+                        pso_rejected = True
+                        temp_reject_reason = "PSO Filter (R1): BB Expansion Bearish"
+                else:
+                    if is_false_mean_reversion_short:
+                        pso_rejected = True
+                        temp_reject_reason = "Pure Loss Filter (R1): False Mean-Reversion Short"
+                    elif (rsi > 72 and volume > avg_vol * 1.5 and is_bullish_candle and upper_wick_ratio < 0.3):
+                        pso_rejected = True
+                        temp_reject_reason = "PSO Filter (R1): Pisau Jatuh Bullish"
+                    elif (price > bbh) and band_expanding and (rsi > 70):
+                        pso_rejected = True
+                        temp_reject_reason = "PSO Filter (R1): BB Expansion Bullish"
+
+                if pso_rejected:
+                    reject_reason = temp_reject_reason
                     continue
-                # Rule 2: Pisau Jatuh Bearish
-                strong_bearish = (rsi < 28 and volume > avg_vol * 1.5 and is_bearish_candle and lower_wick_ratio < 0.3)
-                if strong_bearish:
-                    reject_reason = "PSO Filter (R1): Pisau Jatuh Bearish"
-                    continue
-                # Rule 3: BB Expansion Bearish
-                if (price < bbl) and band_expanding and (rsi < 30):
-                    reject_reason = "PSO Filter (R1): BB Expansion Bearish"
-                    continue
-            else:
-                # Rule 1: False Mean Reversion (Pure Loss)
-                if is_false_mean_reversion_short:
-                    reject_reason = "Pure Loss Filter (R1): False Mean-Reversion Short"
-                    continue
-                # Rule 2: Pisau Jatuh Bullish
-                strong_bullish = (rsi > 72 and volume > avg_vol * 1.5 and is_bullish_candle and upper_wick_ratio < 0.3)
-                if strong_bullish:
-                    reject_reason = "PSO Filter (R1): Pisau Jatuh Bullish"
-                    continue
-                # Rule 3: BB Expansion Bullish
-                if (price > bbh) and band_expanding and (rsi > 70):
-                    reject_reason = "PSO Filter (R1): BB Expansion Bullish"
-                    continue
-            # ────────────────────────────────────────────────────────────────────
 
-            # BB touch + RSI = 2 poin dasar
-            score += 2
+                score += 2
 
-            # Perbaikan #1: Macro filter = 1 poin wajib (tanpa ini, skip)
-            if macro_ok:
-                score += 1
-            else:
-                reject_reason = f"Tren Makro EMA 200 berlawanan (price={price:.1f}, ema200={ema_200:.1f})"
-                continue
+                if macro_ok:
+                    score += 1
+                else:
+                    reject_reason = f"Tren Makro EMA 200 berlawanan (price={price:.1f}, ema200={ema_200:.1f})"
+                    continue
 
-            # Perbaikan #3: OFI sebagai booster (1 poin opsional)
-            if ofi_ok:
-                score += 1
+                if ofi_ok: score += 1
+                if is_volume_spike: score += 1
 
-            # Perbaikan #4: Volume spike sebagai booster (1 poin opsional)
-            if is_volume_spike:
-                score += 1
-
-            # Minimum skor untuk eksekusi
-            if score >= MIN_SIGNAL_SCORE:
-                signal = direction
-                reject_reason = ""
-                log.info(
-                    f"[SIGNAL] {direction} | Score: {score}/5 | Price: {price:.1f} | "
-                    f"RSI: {rsi:.1f} | ADX: {adx:.1f} | OFI: {ofi:.3f} | "
-                    f"VolSpike: {is_volume_spike} | BBW: {bb_width:.4f}"
-                )
-                break
-            else:
-                reject_reason = f"Skor tidak cukup ({score}/{MIN_SIGNAL_SCORE} min)"
+                if score >= MIN_SIGNAL_SCORE:
+                    signal = direction
+                    reject_reason = ""
+                    log.info(
+                        f"[MR SIGNAL] {direction} | Score: {score}/5 | Price: {price:.1f} | "
+                        f"RSI: {rsi:.1f} | ADX: {adx:.1f} | OFI: {ofi:.3f} | BBW: {bb_width:.4f}"
+                    )
+                    break
+                else:
+                    reject_reason = f"Skor MR tidak cukup ({score}/{MIN_SIGNAL_SCORE} min)"
+                    
+        else: # TREND_FOLLOWING
+            for direction in ['LONG', 'SHORT']:
+                score = 0
+                if direction == 'LONG' and is_trending_bull:
+                    bbm_touch = price <= bbm * 1.002 and price >= bbm * 0.998
+                    breakout = price > bbh and is_volume_spike
+                    
+                    if bbm_touch or breakout:
+                        score += 2
+                        if ofi > OFI_BOOST_THRESHOLD: score += 1
+                        if rsi < 70: score += 1
+                        if price > vwap: score += 1
+                        
+                        if score >= MIN_SIGNAL_SCORE:
+                            signal = 'LONG'
+                            reject_reason = ""
+                            log.info(f"[TF SIGNAL] LONG | Score: {score}/5 | Breakout: {breakout} | BBM: {bbm_touch}")
+                            break
+                        else:
+                            reject_reason = f"Skor TF LONG tidak cukup ({score}/{MIN_SIGNAL_SCORE})"
+                            
+                elif direction == 'SHORT' and is_trending_bear:
+                    bbm_touch = price >= bbm * 0.998 and price <= bbm * 1.002
+                    breakout = price < bbl and is_volume_spike
+                    
+                    if bbm_touch or breakout:
+                        score += 2
+                        if ofi < -OFI_BOOST_THRESHOLD: score += 1
+                        if rsi > 30: score += 1
+                        if price < vwap: score += 1
+                        
+                        if score >= MIN_SIGNAL_SCORE:
+                            signal = 'SHORT'
+                            reject_reason = ""
+                            log.info(f"[TF SIGNAL] SHORT | Score: {score}/5 | Breakout: {breakout} | BBM: {bbm_touch}")
+                            break
+                        else:
+                            reject_reason = f"Skor TF SHORT tidak cukup ({score}/{MIN_SIGNAL_SCORE})"
 
         # ── Susun Konteks untuk AI ────────────────────────────────────────────
         context = {
@@ -284,6 +342,10 @@ class StrategyEngine:
             "price_vs_vwap_pct": round(((price - vwap) / vwap) * 100, 3),
             "ema_200_15m": round(ema_200, 2),
             "price_vs_ema200_pct": round(((price - ema_200) / ema_200) * 100, 3),
+            "ema_800_15m": round(ema_800, 2),
+            "strategy_type": strategy_type,
+            "dmp": round(dmp, 2),
+            "dmn": round(dmn, 2),
             "adx": round(adx, 2),
             "atr": round(atr, 2),
             "atr_pct": round((atr / price) * 100, 3),
