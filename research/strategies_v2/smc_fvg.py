@@ -28,11 +28,18 @@ class SMC_FVG_Engine:
         # B. Candle C2 (tengah) harus memiliki Volume > Rata-rata 20 candle (Displacement)
         # C. Ukuran GAP minimal 0.05% dari harga
         
-        # Hitung rata-rata volume (bisa didekati dengan rata-rata 3 candle terakhir karena ini simple script)
-        avg_vol = (current['volume'] + prev1['volume'] + prev2['volume']) / 3
+        # Hitung rata-rata volume (5 candle sebelum FVG candle)
+        # current = iloc[-1], prev1 (FVG candle) = iloc[-2], prev2 = iloc[-3]
+        # prev6 sampai prev2 = iloc[-7:-2]
+        if len(df_5m) >= 7:
+            avg_vol = df_5m['volume'].iloc[-7:-2].mean()
+        else:
+            avg_vol = (current['volume'] + prev1['volume'] + prev2['volume']) / 3
+            
+        vcr = prev1['volume'] / avg_vol if avg_vol > 0 else 0
         
         # Bullish FVG: Low dari candle saat ini > High dari candle ke-3 kebelakang
-        if current['low'] > prev2['high'] and prev1['volume'] > avg_vol * 1.5:
+        if current['low'] > prev2['high'] and 1.5 <= vcr <= 3.0:
             fvg_top = current['low']
             fvg_bottom = prev2['high']
             gap_size_pct = (fvg_top - fvg_bottom) / price * 100
@@ -45,7 +52,7 @@ class SMC_FVG_Engine:
                 })
             
         # Bearish FVG: High dari candle saat ini < Low dari candle ke-3 kebelakang
-        if current['high'] < prev2['low'] and prev1['volume'] > avg_vol * 1.5:
+        if current['high'] < prev2['low'] and 1.5 <= vcr <= 3.0:
             fvg_top = prev2['low']
             fvg_bottom = current['high']
             gap_size_pct = (fvg_top - fvg_bottom) / price * 100
@@ -69,20 +76,32 @@ class SMC_FVG_Engine:
         # Kondisi: Harga close berada di dalam FVG, atau wick menyentuh FVG
         for fvg in self.active_bullish_fvgs[:]: # copy list untuk iterasi
             if fvg['bottom'] <= current['low'] <= fvg['top'] or fvg['bottom'] <= current['close'] <= fvg['top']:
-                # Ini adalah Mitigation! Sinyal LONG
-                signal = "LONG"
-                sl_distance = (price - fvg['bottom'] * 0.999) / price # SL sedikit di bawah FVG bottom
-                self.active_bullish_fvgs.remove(fvg) # Hapus FVG karena sudah termitigasi
-                break
+                # Filter 2: FVG Position Quality (FPQ)
+                fvg_width = fvg['top'] - fvg['bottom']
+                fvg_mid = (fvg['top'] + fvg['bottom']) / 2
+                fpq = abs(price - fvg_mid) / fvg_width if fvg_width > 0 else 1.0
+                
+                if fpq <= 0.4:
+                    # Ini adalah Mitigation! Sinyal LONG
+                    signal = "LONG"
+                    sl_distance = (price - fvg['bottom'] * 0.999) / price # SL sedikit di bawah FVG bottom
+                    self.active_bullish_fvgs.remove(fvg) # Hapus FVG karena sudah termitigasi
+                    break
                 
         # Cek Bearish Mitigation (Harga naik ke area Bearish FVG)
         if signal == "NEUTRAL":
             for fvg in self.active_bearish_fvgs[:]:
                 if fvg['bottom'] <= current['high'] <= fvg['top'] or fvg['bottom'] <= current['close'] <= fvg['top']:
-                    signal = "SHORT"
-                    sl_distance = (fvg['top'] * 1.001 - price) / price # SL sedikit di atas FVG top
-                    self.active_bearish_fvgs.remove(fvg)
-                    break
+                    # Filter 2: FVG Position Quality (FPQ)
+                    fvg_width = fvg['top'] - fvg['bottom']
+                    fvg_mid = (fvg['top'] + fvg['bottom']) / 2
+                    fpq = abs(price - fvg_mid) / fvg_width if fvg_width > 0 else 1.0
+                    
+                    if fpq <= 0.4:
+                        signal = "SHORT"
+                        sl_distance = (fvg['top'] * 1.001 - price) / price # SL sedikit di atas FVG top
+                        self.active_bearish_fvgs.remove(fvg)
+                        break
                     
         # Pembersihan FVG yang Invalidated (ditembus sepenuhnya)
         self.active_bullish_fvgs = [f for f in self.active_bullish_fvgs if current['close'] > f['bottom']]

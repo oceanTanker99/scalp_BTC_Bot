@@ -57,6 +57,18 @@ Pertimbangkan:
 3. Apakah aksi harga di 8 candle terakhir mendukung atau menentang potensi reversal?
 4. Apakah ada tanda-tanda momentum berlanjut (bearish engulfing, volume terus naik saat turun) yang menunjukkan ini BUKAN reversal tapi continuation?
             """
+        elif strategy_type == 'SMC_FVG':
+            strategy_instruction = """Anda adalah Quant Trader institusional beraliran SMART MONEY CONCEPTS (SMC).
+Bot telah mendeteksi sinyal potensial: **{signal}** di grafik 5 Menit BTC/USDT berdasarkan mitigasi Fair Value Gap (FVG).
+Harga baru saja masuk kembali ke area celah kosong yang ditinggalkan oleh pelarian harga institusional (Displacement).
+            """
+            evaluation_instruction = """
+Pertimbangkan:
+1. Sentimen Derivatives: Apakah mayoritas paus (Top L/S Ratio) mendukung arah FVG ini?
+2. Konteks Harga: Apakah FVG ini terjadi searah dengan tren makro (EMA 200)? Jika melawan tren makro, pastikan ada tanda pelemahan yang sangat kuat.
+3. Apakah aksi harga di 8 candle terakhir menunjukkan penolakan (rejection wick) saat menyentuh FVG, atau malah menembusnya dengan agresif?
+4. Tolak jika harga terlihat menembus zona FVG dengan volume yang makin membesar (momentum berlawanan arah sangat kuat).
+            """
         else:
             strategy_instruction = """Anda adalah Quant Trader institusional beraliran TREND-FOLLOWING (Pengikut Tren).
 Bot telah mendeteksi sinyal potensial: **{signal}** di grafik 5 Menit BTC/USDT.

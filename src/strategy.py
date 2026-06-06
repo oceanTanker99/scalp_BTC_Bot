@@ -27,6 +27,72 @@ class StrategyEngine:
                     "score", "signal", "sl_distance", "reject_reason"
                 ])
 
+        # State FVG (Dual-Engine)
+        self.active_bullish_fvgs = []
+        self.active_bearish_fvgs = []
+
+    def _analyze_fvg(self, df_5m: pd.DataFrame, current_15m: pd.Series):
+        if len(df_5m) < 3:
+            return "NEUTRAL", 0.0, 0.0, {}
+
+        current = df_5m.iloc[-1]
+        prev1 = df_5m.iloc[-2]
+        prev2 = df_5m.iloc[-3]
+        
+        price = current['close']
+        avg_vol = (current['volume'] + prev1['volume'] + prev2['volume']) / 3
+        
+        # Bullish FVG
+        if current['low'] > prev2['high'] and prev1['volume'] > avg_vol * 1.5:
+            fvg_top = current['low']
+            fvg_bottom = prev2['high']
+            gap_size_pct = (fvg_top - fvg_bottom) / price * 100
+            if gap_size_pct > 0.05:
+                self.active_bullish_fvgs.append({"top": fvg_top, "bottom": fvg_bottom, "time": current['timestamp']})
+            
+        # Bearish FVG
+        if current['high'] < prev2['low'] and prev1['volume'] > avg_vol * 1.5:
+            fvg_top = prev2['low']
+            fvg_bottom = current['high']
+            gap_size_pct = (fvg_top - fvg_bottom) / price * 100
+            if gap_size_pct > 0.05:
+                self.active_bearish_fvgs.append({"top": fvg_top, "bottom": fvg_bottom, "time": current['timestamp']})
+            
+        self.active_bullish_fvgs = self.active_bullish_fvgs[-5:]
+        self.active_bearish_fvgs = self.active_bearish_fvgs[-5:]
+
+        signal = "NEUTRAL"
+        sl_distance = 0.0
+        
+        for fvg in self.active_bullish_fvgs[:]:
+            if fvg['bottom'] <= current['low'] <= fvg['top'] or fvg['bottom'] <= current['close'] <= fvg['top']:
+                signal = "LONG"
+                sl_distance = (price - fvg['bottom'] * 0.999) / price
+                self.active_bullish_fvgs.remove(fvg)
+                break
+                
+        if signal == "NEUTRAL":
+            for fvg in self.active_bearish_fvgs[:]:
+                if fvg['bottom'] <= current['high'] <= fvg['top'] or fvg['bottom'] <= current['close'] <= fvg['top']:
+                    signal = "SHORT"
+                    sl_distance = (fvg['top'] * 1.001 - price) / price
+                    self.active_bearish_fvgs.remove(fvg)
+                    break
+                    
+        self.active_bullish_fvgs = [f for f in self.active_bullish_fvgs if current['close'] > f['bottom']]
+        self.active_bearish_fvgs = [f for f in self.active_bearish_fvgs if current['close'] < f['top']]
+
+        if sl_distance <= 0:
+            sl_distance = 0.005
+
+        context = {
+            "strategy_type": "SMC_FVG",
+            "active_bull_fvgs": len(self.active_bullish_fvgs),
+            "active_bear_fvgs": len(self.active_bearish_fvgs)
+        }
+        
+        return signal, price, sl_distance, context
+
     def analyze(self, df_1m: pd.DataFrame, df_5m: pd.DataFrame, df_15m: pd.DataFrame, ofi: float):
         """
         Analyze the market and return a signal using a multi-factor scoring system.
@@ -100,6 +166,14 @@ class StrategyEngine:
         if pd.isna(current_15m['ema_200']) or pd.isna(current_15m['ema_800']):
             return "NEUTRAL", current['close'], 0.0, {}
 
+        # ── DeepSeek FVG Engine (Priority) ────────────────────────────────────
+        fvg_signal, fvg_price, fvg_sl_dist, fvg_ctx = self._analyze_fvg(df_5m, current_15m)
+        if fvg_signal != "NEUTRAL":
+            ema_200 = current_15m['ema_200']
+            fvg_ctx['price_vs_ema200_pct'] = round(((fvg_price - ema_200) / ema_200) * 100, 3)
+            return fvg_signal, fvg_price, fvg_sl_dist, fvg_ctx
+
+        # ── Mean Reversion & Trend Following Engine ───────────────────────────
         price       = current['close']
         rsi         = current['rsi']
         bbl         = current[bbl_col]
