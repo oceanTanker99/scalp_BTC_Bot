@@ -199,60 +199,9 @@ class StrategyEngine:
         # Volume Spike
         is_volume_spike = volume > (volume_ma * VOLUME_SPIKE_MULTIPLIER)
 
-        # ── DeepSeek R1: Metrik Anti-Stop-Hunt (PSO) & Pure Loss ─────────────
-        avg_vol = volume_ma
-        
-        range_ht = current['high'] - current['low']
-        if range_ht > 0:
-            upper_wick_ratio = (current['high'] - max(current['open'], current['close'])) / range_ht
-            lower_wick_ratio = (min(current['open'], current['close']) - current['low']) / range_ht
-            close_pos = (current['close'] - current['low']) / range_ht
-        else:
-            upper_wick_ratio = 0
-            lower_wick_ratio = 0
-            close_pos = 0.5
-            
-        is_bullish_candle = current['close'] > current['open']
-        is_bearish_candle = current['close'] < current['open']
-        
-        band_expanding = False
-        is_false_mean_reversion_long = False
-        is_false_mean_reversion_short = False
-
-        if len(df_5m) >= 5:
-            prev_candle = df_5m.iloc[-2]
-            prev_bandwidth = prev_candle[bbh_col] - prev_candle[bbl_col]
-            current_bandwidth = bbh - bbl
-            band_expanding = current_bandwidth > (prev_bandwidth * 1.05)
-
-            # Trend Continuation Check (4 prior candles)
-            prior_4 = df_5m.iloc[-5:-1]
-            is_uptrend_cont = all(
-                prior_4.iloc[i]['high'] > prior_4.iloc[i-1]['high'] and
-                prior_4.iloc[i]['low'] > prior_4.iloc[i-1]['low']
-                for i in range(1, 4)
-            )
-            is_downtrend_cont = all(
-                prior_4.iloc[i]['high'] < prior_4.iloc[i-1]['high'] and
-                prior_4.iloc[i]['low'] < prior_4.iloc[i-1]['low']
-                for i in range(1, 4)
-            )
-            
-            # Persistent Extreme RSI Check
-            persistent_ob = rsi > 70 and prev_candle['rsi'] > 70
-            persistent_os = rsi < 30 and prev_candle['rsi'] < 30
-            
-            # High Volume Breakout Check
-            avg_vol_4 = prior_4['volume'].mean()
-            vol_spike_breakout = volume > (1.5 * avg_vol_4)
-
-            # Combine rules
-            is_false_mean_reversion_short = (
-                vol_spike_breakout and is_uptrend_cont and persistent_ob and close_pos > 0.8
-            )
-            is_false_mean_reversion_long = (
-                vol_spike_breakout and is_downtrend_cont and persistent_os and close_pos < 0.2
-            )
+        # ── DeepSeek R1: Metrik Anti-Stop-Hunt (PSO) & Pure Loss (Dihapus) ─────────────
+        # Filter PSO lokal telah dihapus karena AI (DeepSeek) terbukti jauh lebih 
+        # akurat dalam menilai konteks secara keseluruhan tanpa batasan rumus kaku.
 
         # ── Perbaikan #5: BB Squeeze Detection ───────────────────────────────
         if bb_width < MIN_BB_WIDTH_MR:
@@ -299,11 +248,6 @@ class StrategyEngine:
                 self._log_csv(current, price, rsi, bbl, bbh, bb_width, vwap, adx,
                               ema_200, ofi, is_volume_spike, 0, f"NEUTRAL (ADX>{ADX_THRESHOLD})", sl_distance, reason)
                 return "NEUTRAL", price, sl_distance, {}
-            if bb_width < MIN_BB_WIDTH_MR:
-                reason = f"BB Width Sempit untuk MR ({bb_width*100:.2f}% < {MIN_BB_WIDTH_MR*100:.2f}%)"
-                self._log_csv(current, price, rsi, bbl, bbh, bb_width, vwap, adx,
-                              ema_200, ofi, is_volume_spike, 0, f"NEUTRAL (BBW<{MIN_BB_WIDTH_MR})", sl_distance, reason)
-                return "NEUTRAL", price, sl_distance, {}
 
             for direction in ['LONG', 'SHORT']:
                 score = 0
@@ -315,34 +259,8 @@ class StrategyEngine:
                 if not (bb_touch and rsi_ok):
                     continue  # Trigger utama wajib ada
 
-                # ── Injeksi Filter PSO & Pure Loss (DeepSeek ML) ────────────────────
-                pso_rejected = False
-                temp_reject_reason = ""
-                
-                if direction == 'LONG':
-                    if is_false_mean_reversion_long:
-                        pso_rejected = True
-                        temp_reject_reason = "Pure Loss Filter (R1): False Mean-Reversion Long"
-                    elif (rsi < 28 and volume > avg_vol * 1.5 and is_bearish_candle and lower_wick_ratio < 0.3):
-                        pso_rejected = True
-                        temp_reject_reason = "PSO Filter (R1): Pisau Jatuh Bearish"
-                    elif (price < bbl) and band_expanding and (rsi < 30):
-                        pso_rejected = True
-                        temp_reject_reason = "PSO Filter (R1): BB Expansion Bearish"
-                else:
-                    if is_false_mean_reversion_short:
-                        pso_rejected = True
-                        temp_reject_reason = "Pure Loss Filter (R1): False Mean-Reversion Short"
-                    elif (rsi > 72 and volume > avg_vol * 1.5 and is_bullish_candle and upper_wick_ratio < 0.3):
-                        pso_rejected = True
-                        temp_reject_reason = "PSO Filter (R1): Pisau Jatuh Bullish"
-                    elif (price > bbh) and band_expanding and (rsi > 70):
-                        pso_rejected = True
-                        temp_reject_reason = "PSO Filter (R1): BB Expansion Bullish"
-
-                if pso_rejected:
-                    reject_reason = temp_reject_reason
-                    continue
+                # ── Injeksi Filter PSO & Pure Loss telah dihapus ────────────────────
+                # Semua raw signals diteruskan ke AI untuk dinilai
 
                 score += 2
 

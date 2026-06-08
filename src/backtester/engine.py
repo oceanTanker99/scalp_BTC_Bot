@@ -20,6 +20,7 @@ class BacktestEngine:
     def __init__(self):
         self.trades = []
         self.ai_validator = DeepSeekValidator()
+        self.stats = {'pso_rejected': 0, 'ai_rejected': 0, 'ai_approved': 0}
 
     def prepare_data(self, df_1m: pd.DataFrame, df_5m: pd.DataFrame, df_15m: pd.DataFrame):
         print("⚙️ Pra-kalkulasi indikator secara vectorized (Mohon tunggu)...")
@@ -62,10 +63,10 @@ class BacktestEngine:
         return df_1m, df_5m
 
     def run(self, df_1m: pd.DataFrame, df_5m: pd.DataFrame, df_15m: pd.DataFrame,
-            simulated_rrr=None, use_ai=False):
+            simulated_rrr=None, use_ai=False, use_pso=True):
         df_1m, df_5m = self.prepare_data(df_1m, df_5m, df_15m)
         print(f"📊 Menjalankan simulasi pada {len(df_5m)} candle 5M... "
-              f"(Filter AI: {'Aktif' if use_ai else 'Mati'})")
+              f"(Filter AI: {'Aktif' if use_ai else 'Mati'}, Filter PSO: {'Aktif' if use_pso else 'Mati'})")
 
         rrr_to_use = simulated_rrr if simulated_rrr else RRR_TP1
 
@@ -221,7 +222,9 @@ class BacktestEngine:
                             pso_rejected = True
                                 
                     if pso_rejected:
-                        continue
+                        self.stats['pso_rejected'] += 1
+                        if use_pso:
+                            continue
                     # ────────────────────────────────────────────────────────────────────
     
                     score += 2
@@ -292,9 +295,11 @@ class BacktestEngine:
                     )
                     if not is_approved:
                         print(f"❌ DITOLAK: {reasoning}")
+                        self.stats['ai_rejected'] += 1
                         continue
                     else:
                         print(f"✅ DISETUJUI: {reasoning}")
+                        self.stats['ai_approved'] += 1
                         ai_reasoning = reasoning
                 else:
                     ai_reasoning = "AI Nonaktif"

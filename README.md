@@ -1,38 +1,37 @@
-# 🚀 Scalp BTC Bot (High-Probability Mean-Reversion)
+# 🚀 Scalp BTC Bot (AI-Powered High-Probability Mean-Reversion)
 
-Bot trading algoritma otomatis yang dirancang **khusus** untuk melakukan *scalping* pada pasangan mata uang **BTC/USDT** di Binance Futures. Bot ini menggunakan arsitektur *event-driven* berkecepatan tinggi via Binance WebSockets dan menerapkan strategi **Mean-Reversion multi-timeframe** yang digabungkan dengan validasi AI (DeepSeek).
+Bot trading algoritma otomatis yang beroperasi **24 Jam Nonstop** dan dirancang khusus untuk melakukan *scalping* pada pasangan mata uang **BTC/USDT** di Binance Futures. Bot ini menggunakan arsitektur *event-driven* berkecepatan tinggi via Binance WebSockets dan menerapkan strategi **SMC/FVG & Mean-Reversion multi-timeframe** yang dipadukan secara langsung dengan validasi Artificial Intelligence (DeepSeek V4 Pro).
+
+> [!CAUTION]
+> **PERINGATAN RISIKO TINGGI (HIGH RISK WARNING)**
+> Bot ini dikonfigurasi menggunakan **Leverage sangat agresif yaitu 60x** sesuai preferensi eksperimental. Dengan leverage sebesar ini, fluktuasi harga kurang dari 2% yang berlawanan dengan posisi Anda dapat menyebabkan likuidasi total (*Margin Call*). Selalu gunakan fitur *Stop Loss*, jangan gunakan dana utama Anda, dan jalankan di Binance Testnet terlebih dahulu sebelum menggunakan uang sungguhan!
 
 ---
 
 ## 🧠 Strategi Inti (Multi-Factor Scoring System)
 
-Bot menggunakan sistem skor 5 poin yang menggabungkan beberapa lapisan analisis:
+Bot menggunakan sistem skor 5 poin yang menggabungkan beberapa lapisan analisis teknikal dan kuantitatif:
 
 1. **Macro Trend Filter (EMA 200 — 15m):** Bot memastikan kita tidak melawan tren pasar makro. Jika harga di atas EMA 200 pada timeframe 15 menit, bot hanya mencari peluang *Long*, dan sebaliknya. **(Wajib — 1 poin)**
-2. **Mean-Reversion Trigger (Bollinger Bands + RSI — 5m):** Bot menangkap momen "koreksi berlebihan" dengan mendeteksi harga yang menyentuh batas Bollinger Band (Deviasi 2.0) bersamaan dengan RSI yang menunjukkan kondisi jenuh (30/70). **(Wajib — 2 poin)**
-3. **Volume Spike Confirmation:** Bonus skor jika volume candle saat sinyal melebihi 1.5x rata-rata volume 20 candle terakhir. **(Opsional — 1 poin)**
-4. **Order Flow Imbalance (OFI):** Bonus skor berdasarkan dominasi bid/ask di 5 level teratas orderbook via WebSocket depth stream. **(Opsional — 1 poin)**
-5. **AI Validator (DeepSeek):** Setelah lolos skor minimum (≥3/5), sinyal dikirim ke DeepSeek AI untuk validasi kontekstual akhir sebelum eksekusi.
+2. **Mean-Reversion Trigger (Bollinger Bands + RSI — 5m):** Mendeteksi momen "koreksi berlebihan" dengan membaca harga yang menyentuh batas Bollinger Band (Deviasi 2.0) bersamaan dengan RSI yang menunjukkan kondisi jenuh (30/70). **(Wajib — 2 poin)**
+3. **Volume Spike Confirmation:** Bonus skor jika volume *candle* saat sinyal melebihi 1.5x rata-rata volume 20 *candle* terakhir. **(Opsional — 1 poin)**
+4. **Order Flow Imbalance (OFI):** Bonus skor berdasarkan dominasi pesanan *bid/ask* di 5 level teratas *orderbook* secara real-time via WebSocket. **(Opsional — 1 poin)**
+5. **AI Validator (DeepSeek):** Setelah menembus ambang batas skor (≥3/5), sinyal diteruskan ke model AI DeepSeek untuk validasi logika terakhir. AI akan mengkaji data *market sentiment* dan mengonfirmasi atau menolak (*auto-reject*) sinyal.
 
-### Filter Anti-Loss (Hasil Pelatihan AI DeepSeek R1)
-Berdasarkan analisis *Pure Loss* dan *Stop Hunts*, bot ini telah ditanamkan logika *pre-filter* canggih dari model DeepSeek R1 untuk mendeteksi pergerakan palsu sebelum eksekusi:
-- **False Mean-Reversion (Pure Loss) Filter**: Sinyal otomatis ditolak jika terjadi (1) *Volume Spike* yang brutal (>1.5x rata-rata), (2) tren searah yang sangat kuat selama 4 *candle* berturut-turut (tanpa *pullback*), (3) RSI tertahan di zona ekstrem selama > 2 *candle* (terlalu *overextended*), dan (4) harga penutupan hampir tidak memiliki ekor perlawanan (*strong momentum*).
-- **Stop-Hunt (PSO) Filter**: Sinyal ditolak jika terdeteksi ekspansi mulut buaya Bollinger (*Volatility Expansion*) atau pola "Pisau Jatuh" (*Falling Knife*).
-
-### Filter Lingkungan Makro
-- **ADX Filter:** Sinyal ditolak jika ADX > 30 (tren terlalu kuat untuk mean-reversion).
-- **BB Squeeze Detection:** Sinyal ditolak jika BB Width < 0.2% (pasar sedang konsolidasi sempit).
-- **Trading Session:** Bot hanya aktif pada jam 08:00–21:00 UTC (London + New York session).
+### 🛡️ Filter Lingkungan Makro & Sentimen (Sentinel)
+- **Economic Calendar (News Filter):** Bot otomatis menunda perdagangan (*pause*) 30 menit sebelum dan sesudah rilis berita *High Impact* makroekonomi AS (seperti CPI, NFP, atau Keputusan Suku Bunga The Fed) untuk menghindari badai volatilitas.
+- **Binance Sentiment Data:** Integrasi data API sentimen pasar, termasuk *Funding Rate*, *Open Interest*, *Top Trader Long/Short Ratio*, dan *Global Long/Short Ratio* sebagai bahan evaluasi AI.
+- **ADX Filter:** Sinyal ditolak jika ADX > 30 (tren terlalu kuat untuk strategi *mean-reversion* yang melawan arah sementara).
+- **BB Squeeze Detection:** Sinyal otomatis ditolak jika pasar sedang konsolidasi di rentang sangat sempit (Bollinger Band Width < 0.2%).
 
 ---
 
 ## ⚙️ Persyaratan Sistem
 
-- Python 3.12+ (jika menjalankan secara lokal)
-- Docker & Docker Compose (Direkomendasikan)
-- Akun Binance Futures (Testnet / Mainnet)
-- API Key DeepSeek (untuk validasi AI)
-- Bot Telegram + Chat ID (opsional, untuk notifikasi)
+- **Docker & Docker Compose** (Sangat Direkomendasikan untuk stabilitas dan kompatibilitas Linux/Windows).
+- Akun Binance Futures (API Key & Secret Key).
+- API Key DeepSeek (Wajib. Jika kosong, bot otomatis menolak eksekusi *trade*).
+- Bot Telegram + Chat ID (Untuk memonitor aktivitas bot dan memberi komando).
 
 ---
 
@@ -50,17 +49,19 @@ Edit file `.env`:
 # Binance Futures API Keys
 BINANCE_API_KEY=Kunci_API_Anda
 BINANCE_SECRET_KEY=Rahasia_API_Anda
-BINANCE_TESTNET=true  # Ubah ke 'false' untuk Live Trading
+BINANCE_TESTNET=true  # Ubah ke 'false' untuk menggunakan uang sungguhan
 
 # DeepSeek AI Validator
 DEEPSEEK_API_KEY=Kunci_API_DeepSeek_Anda
 
-# (Opsional) Notifikasi Telegram
+# Notifikasi Telegram
 TELEGRAM_BOT_TOKEN=Token_Bot_Anda
 TELEGRAM_CHAT_ID=ID_Chat_Anda
 ```
 
 ### 🐳 Langkah 2: Menjalankan dengan Docker (Direkomendasikan)
+
+Arsitektur Docker telah diamankan sedemikian rupa dengan limitasi *resource* dan penggunaan `botuser` (non-root) untuk proteksi serangan.
 
 ```bash
 # Bangun dan jalankan container
@@ -73,32 +74,24 @@ docker compose logs -f
 docker compose down
 ```
 
-### 💻 Langkah 2 Alternatif: Menjalankan Secara Lokal
+---
 
-```bash
-# Instal dependensi
-pip install -r requirements.txt
+## 📱 Perintah Interaktif Telegram
 
-# Jalankan bot
-python main.py
-```
-
-### 📊 Menjalankan Backtest
-
-```bash
-# Backtest otomatis mengunduh data jika belum ada
-python run_backtest.py
-```
+Bot ini dilengkapi dengan *Long-Polling* interaktif via Telegram. Kirim pesan ke bot Telegram Anda dengan perintah berikut:
+- `/status`  — Melihat detail posisi trading yang saat ini sedang aktif (Entry, Harga Saat ini, PnL, ROE).
+- `/balance` — Mengecek saldo dompet (*wallet balance*) Anda di Binance Futures.
+- `/kill`    — **Kill Switch Manual!** Memaksa bot untuk berhenti mengeksekusi *trade* selama sisa hari itu (akan me-reset otomatis keesokan harinya di 00:00 UTC).
+- `/ping`    — Memeriksa apakah *server* bot Anda masih merespons.
 
 ---
 
-## 🛡️ Fitur Manajemen Risiko
+## 🛡️ Fitur Manajemen Risiko & Proteksi Darurat
 
-- **Kill Switch Harian:** Jika drawdown melebihi 20% dari saldo awal harian, bot berhenti trading untuk sisa hari itu. Reset otomatis setiap 00:00 UTC.
-- **Chasing Limit Order:** Entry menggunakan Post-Only Limit Order dengan mekanisme *price chasing* — harga di-offset secara progresif hingga 3 percobaan agar terisi tanpa membayar taker fee.
-- **Trailing Stop (Break Even):** Jika profit mencapai ≥ 0.5%, Stop Loss otomatis dipindahkan ke titik impas.
-- **Cooldown Timer:** Jeda 3 candle (15 menit) antar trade untuk menghindari overtrading.
-- **Risk Per Trade:** 1% dari saldo per trade dengan leverage 60x.
+- **Kill Switch Harian Automatis:** Jika *drawdown* harian menyentuh kerugian > 20% dari saldo awal di hari tersebut, bot otomatis mogok (*shutdown*) untuk mencegah terkurasnya margin lebih lanjut.
+- **Trailing Stop (Break Even):** Jika posisi telah mendapatkan profit ≥ 0.5%, Stop Loss otomatis dipindahkan ke harga balik modal (*Break Even*) agar posisi dijamin tanpa kerugian.
+- **Emergency Market Close:** Fitur proteksi ekstrem; apabila Binance API gagal menerima pembaruan parameter perlindungan dari *Trailing Stop* (yang membiarkan *open position* tanpa jaring pengaman), bot akan menembak order `MARKET CLOSE` secara darurat untuk menutup posisi di harga saat itu.
+- **Cooldown Timer:** Pemberlakuan jeda 15 menit (3 candle) setelah transaksi selesai untuk melindungi dari perdagangan membabi-buta (*overtrading*).
 
 ---
 
@@ -106,26 +99,23 @@ python run_backtest.py
 
 ```
 scalp_BTC_Bot/
-├── main.py                    # Titik masuk utama, orkestrasi bot
+├── main.py                    # Titik masuk utama, orkestrator sistem
 ├── config/
-│   └── config.py              # Konfigurasi terpusat (leverage, indikator, risiko)
+│   └── config.py              # Parameter inti, pengaturan leverage 60x, dll
 ├── src/
-│   ├── market_stream.py       # WebSocket stream (Klines 1m/5m/15m + Depth)
-│   ├── strategy.py            # Mesin analisis teknikal & scoring system
-│   ├── live_trader.py         # Eksekusi order & trailing stop management
-│   ├── ai_analyzer.py         # Validasi sinyal via DeepSeek AI
-│   ├── notifier.py            # Notifikasi Telegram
-│   └── backtester/
-│       ├── engine.py          # Mesin backtesting dengan simulasi 1m
-│       └── downloader.py      # Pengunduh data historis Binance
-├── run_backtest.py            # Script untuk menjalankan backtest
-├── tools/                     # Script debug & utilitas (tidak untuk produksi)
-├── Dockerfile                 # Container image
-├── docker-compose.yml         # Konfigurasi Docker Compose
-├── requirements.txt           # Dependensi Python
-└── .env.example               # Template environment variables
+│   ├── market_stream.py       # Engine WebSocket Binance (OFI, Candle Live)
+│   ├── strategy.py            # Engine teknikal (SMC/FVG, Scoring System)
+│   ├── live_trader.py         # Eksekusi limit order & manajemen SL/TP
+│   ├── ai_analyzer.py         # Penghubung DeepSeek Validator
+│   ├── notifier.py            # Poller & Pengirim notifikasi Telegram
+│   ├── sentiment.py           # Ekstraktor data Funding Rate & OI
+│   ├── calendar.py            # Sistem penarik Kalender Ekonomi Makro
+│   └── backtester/            # Modul simulasi masa lalu
+├── Dockerfile                 # Image konfigurasi terisolasi (Non-Root User)
+├── docker-compose.yml         # Manajemen orkestrasi & Resource Limit
+└── requirements.txt           # Dependensi pustaka Python
 ```
 
 ---
 
-*Penafian (Disclaimer): Algoritma trading ini melibatkan risiko finansial yang signifikan. Selalu lakukan pengujian di Binance Testnet sebelum mempertaruhkan uang sungguhan.*
+*Penafian (Disclaimer): Algoritma trading ini melibatkan risiko finansial yang ekstrim. Tidak ada garansi atas kerugian Anda. Pengembang tidak bertanggung jawab atas likuidasi saldo.*

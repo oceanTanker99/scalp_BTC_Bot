@@ -8,3 +8,14 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+    # Batas resource agar tidak memakan seluruh host
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    # Opsi keamanan tambahan
+    security_opt:
+      - no-new-privileges:true

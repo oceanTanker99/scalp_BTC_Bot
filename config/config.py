@@ -15,8 +15,8 @@ TELEGRAM_CHAT_IDS = [x.strip() for x in os.getenv("TELEGRAM_CHAT_ID", "").split(
 SYMBOL = "BTCUSDT"
 
 # Trading Sessions (UTC Time)
-TRADE_START_HOUR_UTC = 8   # 08:00 UTC (Awal London Session)
-TRADE_END_HOUR_UTC = 21    # 21:00 UTC (Akhir New York Session)
+TRADE_START_HOUR_UTC = 0   # 00:00 UTC (Buka 24 Jam)
+TRADE_END_HOUR_UTC = 24    # 24:00 UTC (Tutup 24 Jam)
 
 # Risk Management
 MAX_DAILY_DRAWDOWN_PCT = 0.20
@@ -62,3 +62,25 @@ BREAK_EVEN_TRIGGER_PCT = 0.005  # Pindah SL ke titik impas jika profit > 0.5%
 
 # Cooldown pasca trade (dalam jumlah candle 5m, 1 candle = 5 menit)
 COOLDOWN_CANDLES = 3  # Jeda 15 menit setelah trade selesai
+
+# --- Validasi Startup ---
+def validate_config():
+    """Validasi konfigurasi wajib saat bot dimulai."""
+    errors = []
+    if not BINANCE_API_KEY:
+        errors.append("BINANCE_API_KEY tidak diset di .env")
+    if not BINANCE_SECRET_KEY:
+        errors.append("BINANCE_SECRET_KEY tidak diset di .env")
+    if not DEEPSEEK_API_KEY:
+        errors.append("DEEPSEEK_API_KEY tidak diset di .env (AI Validator tidak akan berfungsi)")
+    if not TELEGRAM_BOT_TOKEN:
+        errors.append("TELEGRAM_BOT_TOKEN tidak diset di .env")
+    if not TELEGRAM_CHAT_IDS:
+        errors.append("TELEGRAM_CHAT_ID tidak diset di .env")
+    
+    if errors:
+        for e in errors:
+            print(f"❌ CONFIG ERROR: {e}")
+        # Hanya raise jika API key exchange kosong (kritis untuk trading)
+        if not BINANCE_API_KEY or not BINANCE_SECRET_KEY:
+            raise ValueError("Konfigurasi Binance API wajib diisi! Cek file .env")

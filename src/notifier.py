@@ -4,27 +4,88 @@ from config.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS
 
 log = logging.getLogger(__name__)
 
+import asyncio
+
 class TelegramNotifier:
     def __init__(self):
         self.token = TELEGRAM_BOT_TOKEN
         self.chat_ids = TELEGRAM_CHAT_IDS
         self.enabled = bool(self.token and self.chat_ids)
+        self._session = None
         if not self.enabled:
             log.warning("Notifikasi Telegram dinonaktifkan: TOKEN atau CHAT_ID tidak ditemukan.")
+
+    async def _get_session(self):
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession()
+        return self._session
 
     async def send(self, message: str):
         if not self.enabled:
             return
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"
         try:
-            async with aiohttp.ClientSession() as session:
-                for chat_id in self.chat_ids:
-                    payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
-                    async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                        if resp.status != 200:
-                            log.error(f"Gagal mengirim pesan Telegram ke {chat_id}: {resp.status}")
+            session = await self._get_session()
+            for chat_id in self.chat_ids:
+                payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
+                async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status != 200:
+                        log.error(f"Gagal mengirim pesan Telegram ke {chat_id}: {resp.status}")
         except Exception as e:
             log.error(f"Error Telegram: {e}")
+            self._session = None  # Reset session jika error
+
+    async def _send_to_chat(self, chat_id: str, message: str):
+        url = f"https://api.telegram.org/bot{self.token}/sendMessage"
+        payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
+        try:
+            session = await self._get_session()
+            async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status != 200:
+                    log.error(f"Gagal membalas Telegram ke {chat_id}: {resp.status}")
+        except Exception as e:
+            log.error(f"Gagal membalas Telegram ke {chat_id}: {e}")
+
+    async def start_polling(self, trader):
+        if not self.enabled:
+            return
+        url = f"https://api.telegram.org/bot{self.token}/getUpdates"
+        offset = 0
+        log.info("📡 Mulai mendengarkan perintah Telegram (/status, /balance, /kill)...")
+        
+        while True:
+            try:
+                session = await self._get_session()
+                poll_payload = {"offset": offset, "timeout": 30}
+                async with session.get(url, params=poll_payload, timeout=aiohttp.ClientTimeout(total=40)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        for update in data.get("result", []):
+                            offset = update["update_id"] + 1
+                            msg = update.get("message", {})
+                            text = msg.get("text", "").strip()
+                            chat_id = str(msg.get("chat", {}).get("id", ""))
+                            
+                            # Verifikasi keamanan: Hanya memproses dari chat ID yang terdaftar
+                            if chat_id in self.chat_ids and text.startswith("/"):
+                                log.info(f"Telegram Command: {text} dari {chat_id}")
+                                if text == "/status":
+                                    pos_msg = await trader.get_active_position_details()
+                                    await self._send_to_chat(chat_id, pos_msg)
+                                elif text == "/balance":
+                                    bal = await trader.get_balance()
+                                    await self._send_to_chat(chat_id, f"💰 <b>Saldo Saat Ini:</b>\n<code>{bal:,.4f}</code> USDT")
+                                elif text == "/kill":
+                                    trader.is_killed = True
+                                    await self._send_to_chat(chat_id, "🚨 <b>KILL SWITCH AKTIF!</b>\nBot berhenti beroperasi untuk hari ini secara manual.")
+                                elif text == "/ping":
+                                    await self._send_to_chat(chat_id, "🏓 <b>PONG!</b> Bot Scalp BTC sedang online.")
+            except asyncio.TimeoutError:
+                pass
+            except Exception as e:
+                log.error(f"Error Telegram Polling: {e}")
+                self._session = None  # Reset session jika error polling
+                await asyncio.sleep(5)
 
     async def notify_trade(self, signal: str, price: float, qty: float, sl: float, tp: float):
         emoji = "🟢" if signal == "LONG" else "🔴"

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections import deque
 from binance import AsyncClient, BinanceSocketManager
 import pandas as pd
 
@@ -20,9 +21,9 @@ class MarketStream:
         """
         self.client = client
         self.bsm = None
-        self.klines_1m = []
-        self.klines_5m = []
-        self.klines_15m = []
+        self.klines_1m = deque(maxlen=MAX_KLINES)
+        self.klines_5m = deque(maxlen=MAX_KLINES)
+        self.klines_15m = deque(maxlen=MAX_KLINES)
         self.orderbook = {"bids": [], "asks": []}
         self.callbacks = []
         self._running = True
@@ -41,10 +42,12 @@ class MarketStream:
         await self._load_historical()
 
         # Setiap stream dibungkus dengan loop reconnect
-        asyncio.create_task(self._run_with_reconnect("1m", self._kline_stream))
-        asyncio.create_task(self._run_with_reconnect("5m", self._kline_stream))
-        asyncio.create_task(self._run_with_reconnect("15m", self._kline_stream))
-        asyncio.create_task(self._run_depth_with_reconnect())
+        self._tasks = [
+            asyncio.create_task(self._run_with_reconnect("1m", self._kline_stream)),
+            asyncio.create_task(self._run_with_reconnect("5m", self._kline_stream)),
+            asyncio.create_task(self._run_with_reconnect("15m", self._kline_stream)),
+            asyncio.create_task(self._run_depth_with_reconnect()),
+        ]
 
     # --- Reconnect Wrapper ---
     async def _run_with_reconnect(self, interval: str, stream_fn):
@@ -70,13 +73,16 @@ class MarketStream:
     async def _load_historical(self):
         log.info("Memuat data historis untuk kalkulasi awal...")
         res_1m = await self.client.futures_klines(symbol=SYMBOL, interval="1m", limit=100)
-        self.klines_1m = self._parse_klines(res_1m)
+        self.klines_1m.clear()
+        self.klines_1m.extend(self._parse_klines(res_1m))
 
         res_5m = await self.client.futures_klines(symbol=SYMBOL, interval="5m", limit=100)
-        self.klines_5m = self._parse_klines(res_5m)
+        self.klines_5m.clear()
+        self.klines_5m.extend(self._parse_klines(res_5m))
 
         res_15m = await self.client.futures_klines(symbol=SYMBOL, interval="15m", limit=250)
-        self.klines_15m = self._parse_klines(res_15m)
+        self.klines_15m.clear()
+        self.klines_15m.extend(self._parse_klines(res_15m))
 
     def _parse_klines(self, klines):
         return [{
@@ -88,13 +94,11 @@ class MarketStream:
             "volume": float(k[5]),
         } for k in klines]
 
-    def _update_klines(self, kline_list: list, formatted: dict, max_size: int = MAX_KLINES):
-        """Update daftar klines dengan candle baru, jaga batas maksimum (anti memory leak)."""
-        if len(kline_list) >= max_size:
-            kline_list.pop(0)
+    def _update_klines(self, kline_list, formatted: dict, max_size: int = MAX_KLINES):
+        """Update daftar klines dengan candle baru. Deque otomatis membuang yang lama."""
         kline_list.append(formatted)
 
-    def _update_or_append_live(self, kline_list: list, formatted: dict):
+    def _update_or_append_live(self, kline_list, formatted: dict):
         """
         Update candle yang sedang berjalan (belum ditutup).
         FIX BUG-01: Terapkan MAX_KLINES juga untuk candle live agar tidak memory leak.
@@ -161,9 +165,9 @@ class MarketStream:
         return (bid_vol - ask_vol) / total
 
     def get_dataframes(self):
-        df_1m = pd.DataFrame(self.klines_1m)
-        df_5m = pd.DataFrame(self.klines_5m)
-        df_15m = pd.DataFrame(self.klines_15m)
+        df_1m = pd.DataFrame(list(self.klines_1m))
+        df_5m = pd.DataFrame(list(self.klines_5m))
+        df_15m = pd.DataFrame(list(self.klines_15m))
         return df_1m, df_5m, df_15m
 
     async def _trigger_callbacks(self):

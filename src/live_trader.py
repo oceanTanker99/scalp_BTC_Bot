@@ -80,6 +80,38 @@ class LiveTrader:
             log.error(f"Gagal mengecek posisi: {e}")
             return True  # Failsafe: anggap ada posisi jika API error
 
+    async def get_active_position_details(self) -> str:
+        """Mengambil detail posisi aktif untuk Telegram."""
+        try:
+            positions = await self.client.futures_position_information(symbol=SYMBOL)
+            for pos in positions:
+                amt = float(pos.get('positionAmt', 0))
+                if amt != 0:
+                    side = "LONG 🟢" if amt > 0 else "SHORT 🔴"
+                    entry = float(pos.get('entryPrice', 0))
+                    mark = float(pos.get('markPrice', 0))
+                    unrealized_pnl = float(pos.get('unRealizedProfit', 0))
+                    leverage = pos.get('leverage', LEVERAGE)
+                    
+                    margin_used = (abs(amt) * entry) / float(leverage)
+                    roi_pct = (unrealized_pnl / margin_used * 100) if margin_used > 0 else 0
+                    
+                    msg = (
+                        f"📊 <b>POSISI AKTIF: {SYMBOL}</b>\n"
+                        f"━━━━━━━━━━━━━━━━\n"
+                        f"Arah : {side}\n"
+                        f"Size : <code>{abs(amt)}</code> BTC\n"
+                        f"Entry: <code>{entry:,.1f}</code> USDT\n"
+                        f"Mark : <code>{mark:,.1f}</code> USDT\n"
+                        f"PnL  : <code>{unrealized_pnl:+.2f}</code> USDT (<b>{roi_pct:+.2f}%</b>)\n"
+                        f"Lev  : {leverage}x\n"
+                    )
+                    return msg
+            return "✅ <b>STATUS AMAN</b>\nSaat ini tidak ada posisi terbuka (Flat)."
+        except Exception as e:
+            log.error(f"Gagal mengambil detail posisi: {e}")
+            return f"❌ <b>ERROR API</b>\nGagal mengambil posisi:\n<code>{e}</code>"
+
     async def check_kill_switch(self) -> bool:
         """
         Cek apakah drawdown harian melebihi batas.
@@ -201,6 +233,16 @@ class LiveTrader:
                 return None, None, None
 
             # --- Pasang SL & TP setelah entry terisi ---
+            actual_entry = float(final_order.get('avgPrice', limit_price))
+
+            # Rekalkulasi SL/TP berdasarkan harga entry aktual (bukan estimasi awal)
+            if signal == 'LONG':
+                sl_price = round(actual_entry * (1 - sl_pct), 1)
+                tp_price = round(actual_entry * (1 + (sl_pct * RRR_TP1)), 1)
+            else:
+                sl_price = round(actual_entry * (1 + sl_pct), 1)
+                tp_price = round(actual_entry * (1 - (sl_pct * RRR_TP1)), 1)
+
             log.info("🛡️ Memasang perlindungan Stop Loss dan Take Profit...")
 
             # Stop Loss
@@ -223,7 +265,6 @@ class LiveTrader:
                 timeInForce='GTE_GTC'
             )
 
-            actual_entry = float(final_order.get('avgPrice', limit_price))
             log.info(
                 f"✅ Trade berhasil! Entry: {actual_entry}, SL: {sl_price}, TP: {tp_price}"
             )
@@ -304,6 +345,24 @@ class LiveTrader:
                             )
                             log.info("🛡️ SL lama berhasil dipulihkan.")
                         except Exception as e2:
-                            log.error(f"🚨🚨 KRITIKAL: Gagal memulihkan SL lama: {e2}. POSISI SAAT INI TANPA STOP LOSS!")
+                            log.error(f"🚨🚨 KRITIKAL: Gagal memulihkan SL lama: {e2}. Menutup posisi darurat...")
+                            try:
+                                await self.client.futures_create_order(
+                                    symbol=SYMBOL, side=side, type='MARKET',
+                                    reduceOnly='true'
+                                )
+                                log.info("🚨 Posisi ditutup secara darurat (MARKET ORDER) karena SL gagal dipasang.")
+                                if self._notifier:
+                                    await self._notifier.notify_error(
+                                        "🚨🚨 DARURAT: SL gagal dipasang ulang saat trailing stop!\n"
+                                        "Posisi telah DITUTUP PAKSA via Market Order untuk melindungi modal."
+                                    )
+                            except Exception as e3:
+                                log.error(f"🚨🚨🚨 GAGAL TOTAL menutup posisi darurat: {e3}")
+                                if self._notifier:
+                                    await self._notifier.notify_error(
+                                        f"🚨🚨🚨 KRITIS TOTAL: Posisi TANPA SL dan gagal ditutup darurat!\n"
+                                        f"SEGERA TUTUP MANUAL DI BINANCE!\nError: {e3}"
+                                    )
         except Exception as e:
             log.error(f"Error di manage_trailing_stop: {e}")

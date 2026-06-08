@@ -18,7 +18,7 @@ class EconomicCalendar:
 
     async def start(self):
         # Jalankan task background untuk update data setiap 12 jam
-        asyncio.create_task(self._refresh_loop())
+        self._refresh_task = asyncio.create_task(self._refresh_loop())
 
     async def _refresh_loop(self):
         while self._running:

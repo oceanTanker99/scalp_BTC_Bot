@@ -1,4 +1,5 @@
 import json
+import asyncio
 import logging
 from openai import AsyncOpenAI
 import pandas as pd
@@ -7,8 +8,8 @@ from config.config import DEEPSEEK_API_KEY
 log = logging.getLogger(__name__)
 
 # Konfigurasi retry & timeout
-AI_REQUEST_TIMEOUT = 30   # Timeout per request dalam detik
-AI_MAX_RETRIES = 2        # Jumlah retry jika request gagal
+AI_REQUEST_TIMEOUT = 120   # Timeout per request dalam detik
+AI_MAX_RETRIES = 3        # Jumlah retry jika request gagal
 
 class DeepSeekValidator:
     def __init__(self):
@@ -29,8 +30,8 @@ class DeepSeekValidator:
         Validasi sinyal menggunakan DeepSeek AI dengan parameter Sentiment.
         """
         if not self.client:
-            log.warning("Client DeepSeek tidak aktif. Sinyal disetujui otomatis.")
-            return True, "AI nonaktif"
+            log.warning("Client DeepSeek tidak aktif. Sinyal DITOLAK untuk keamanan.")
+            return False, "DITOLAK: API key tidak diset"
 
         ctx = context or {}
         sent = sentiment or {}
@@ -129,17 +130,17 @@ Jawab HANYA dengan format JSON berikut, tanpa teks lain:
                 )
 
                 response = await self.client.chat.completions.create(
-                    model="deepseek-chat",
+                    model="deepseek-v4-pro",
                     messages=[
                         {
                             "role": "system",
-                            "content": ("You are an elite institutional quantitative trader "
-                                        "specializing in mean-reversion strategies. Output only strict JSON.")
+                            "content": (f"You are an elite institutional quantitative trader "
+                                        f"specializing in {strategy_type} strategies. Output only strict JSON.")
                         },
                         {"role": "user", "content": prompt}
                     ],
                     response_format={"type": "json_object"},
-                    temperature=0.1
+                    extra_body={"reasoning_effort": "medium"}
                 )
 
                 result_str = response.choices[0].message.content
@@ -149,6 +150,7 @@ Jawab HANYA dengan format JSON berikut, tanpa teks lain:
                 is_approved = result_json.get('approved', False)
 
                 log.info(f"[DEEPSEEK] {'✅ DISETUJUI' if is_approved else '❌ DITOLAK'} | {reasoning}")
+                await asyncio.sleep(3)  # Rate limit cooldown
                 return is_approved, reasoning
 
             except json.JSONDecodeError as e:
@@ -157,6 +159,9 @@ Jawab HANYA dengan format JSON berikut, tanpa teks lain:
             except Exception as e:
                 log.error(f"DeepSeek API error (percobaan {attempt}): {e}")
                 last_error = str(e)
+
+                if attempt < AI_MAX_RETRIES:
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
 
         # Semua percobaan gagal — tolak sinyal untuk keamanan
         log.warning(f"⚠️ Semua {AI_MAX_RETRIES} percobaan DeepSeek gagal. Sinyal ditolak untuk keamanan.")

@@ -23,13 +23,16 @@ if sys.platform == 'win32':
 
 # --- Setup Logging (Terminal + File Permanen) ---
 os.makedirs("logs", exist_ok=True)
+handlers = [logging.StreamHandler(sys.stdout)]
+try:
+    handlers.append(logging.FileHandler("logs/bot.log", encoding="utf-8"))
+except PermissionError:
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("logs/bot.log", encoding="utf-8")
-    ]
+    handlers=handlers
 )
 log = logging.getLogger(__name__)
 
@@ -81,6 +84,9 @@ class ScalpBot:
         # Beri waktu kalender mengambil data awal
         await asyncio.sleep(2)
         
+        # Mulai Telegram poller di background
+        self._polling_task = asyncio.create_task(self.notifier.start_polling(self.trader))
+        
         await self.stream.start()
 
         # Keep alive
@@ -93,6 +99,7 @@ class ScalpBot:
         if self.trader.is_killed and self._last_kill_switch_date != today_utc:
             log.info("🔄 Hari baru terdeteksi. Mereset kill switch...")
             self.trader.is_killed = False
+            self._last_kill_switch_date = today_utc
             self.trader.start_balance = await self.trader.get_balance()
 
         # --- Cek kill switch ---
@@ -199,4 +206,10 @@ if __name__ == "__main__":
         log.info("🛑 Bot dihentikan oleh pengguna.")
     except Exception as e:
         log.error(f"💥 Fatal error: {e}", exc_info=True)
-        asyncio.run(bot.notifier.notify_error(str(e)))
+        # Gunakan event loop baru untuk mengirim notifikasi darurat
+        try:
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(bot.notifier.notify_error(str(e)))
+            loop.close()
+        except Exception:
+            log.error("Gagal mengirim notifikasi fatal error ke Telegram.")
