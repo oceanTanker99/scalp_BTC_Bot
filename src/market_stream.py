@@ -53,10 +53,14 @@ class MarketStream:
 
     async def _aggtrade_stream(self):
         log.info("Memulai aggTrade stream (Order Flow / CVD)...")
+        tick_count = 0
         async with self.bsm.aggtrade_socket(symbol=SYMBOL) as stream:
             while self._running:
                 msg = await stream.recv()
                 self.engine.process_agg_trade(msg)
+                tick_count += 1
+                if tick_count % 100 == 0:
+                    log.info(f"Received {tick_count} ticks... VWAP: {self.engine.get_metrics()['vwap']}")
 
     async def _depth_stream(self):
         log.info("Memulai depth stream (L2 Imbalance)...")

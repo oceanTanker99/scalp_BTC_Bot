@@ -83,7 +83,7 @@ impl EngineState {
         
         // 3. Remove old ticks (14400s)
         while let Some(&(f_price, f_qty, f_ts, f_abs_change)) = self.profile_ticks.front() {
-            if ts - f_ts > 14400_000 {
+            if ts.saturating_sub(f_ts) > 14400_000 {
                 let f_idx = Self::price_to_index(f_price);
                 if f_idx < self.histogram.len() {
                     self.histogram[f_idx] -= f_qty;
@@ -101,7 +101,7 @@ impl EngineState {
         
         // 4. Remove old ticks CVD (14400s)
         while let Some(&(f_price, f_qty, f_ts, f_maker)) = self.cvd_ticks.front() {
-            if ts - f_ts > 14400_000 {
+            if ts.saturating_sub(f_ts) > 14400_000 {
                 let f_cvd = if f_maker { -f_qty } else { f_qty };
                 self.cvd -= f_cvd;
                 self.vol_price_sum -= f_price * f_qty;
@@ -124,7 +124,7 @@ impl EngineState {
         let min_idx = self.global_min_idx;
         let max_idx = self.global_max_idx;
         
-        if min_idx >= max_idx || min_idx == 2_000_000 { return (0.0, 0.0, 0.0); }
+        if min_idx == 2_000_000 { return (0.0, 0.0, 0.0); }
         
         for i in min_idx..=max_idx {
             if self.histogram[i] > max_vol {

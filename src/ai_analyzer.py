@@ -37,7 +37,7 @@ class AITuner:
             # Use host.docker.internal to reach the Windows host from inside Docker
             self.client = AsyncOpenAI(
                 api_key=self.api_key,
-                base_url=os.getenv("AI_BASE_URL", "http://host.docker.internal:20128/v1"),
+                base_url=os.getenv("AI_BASE_URL", "https://api.9router.com/v1"),
                 timeout=AI_REQUEST_TIMEOUT
             )
 
@@ -62,7 +62,7 @@ class AITuner:
                 
                 # Cek jika data sudah cukup lewat ketersediaan VWAP dan POC
                 if metrics_4h.get('vwap', 0) == 0 or metrics_4h.get('poc', 0) == 0:
-                    log.info("Data belum cukup untuk AI Tuning. Skip siklus ini.")
+                    log.info(f"Data belum cukup untuk AI Tuning (VWAP: {metrics_4h.get('vwap', 0)}, POC: {metrics_4h.get('poc', 0)}). Skip siklus ini.")
                     await asyncio.sleep(60)
                     continue
                     
