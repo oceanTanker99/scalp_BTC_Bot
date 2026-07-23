@@ -1,6 +1,9 @@
 import logging
 import asyncio
 import time
+import os
+import csv
+from datetime import datetime
 from binance import AsyncClient
 from binance.exceptions import BinanceAPIException
 from config.config import (
@@ -28,6 +31,20 @@ class LiveTrader:
         self.start_balance = 0.0
         self._notifier = None  # Diisi oleh main.py
         self.is_killed = False  # Flag kill switch — aktif = berhenti trading hari ini
+        self._last_logged_trade_id = None
+
+    async def sync_time(self):
+        # Sync time with Binance Server to prevent Timestamp APIError (-1021)
+        try:
+            res = await self.client.futures_time()
+            server_time = res['serverTime']
+            local_time = int(time.time() * 1000)
+            # Berikan buffer mundur 1000ms agar timestamp kita tidak pernah mendahului waktu server (ahead of server time).
+            # Binance menerima timestamp hingga 5000ms di masa lalu (recvWindow default).
+            self.client.timestamp_offset = (server_time - local_time) - 1000
+            log.info(f"Waktu disinkronkan. Offset: {self.client.timestamp_offset} ms")
+        except Exception as e:
+            log.error(f"Gagal sinkronisasi waktu Binance: {e}")
 
     async def initialize(self):
         if self.client is None:
@@ -35,15 +52,7 @@ class LiveTrader:
                 BINANCE_API_KEY, BINANCE_SECRET_KEY, testnet=BINANCE_TESTNET
             )
         
-        # Sync time with Binance Server to prevent Timestamp APIError (-1021)
-        try:
-            res = await self.client.futures_time()
-            server_time = res['serverTime']
-            local_time = int(time.time() * 1000)
-            self.client.timestamp_offset = server_time - local_time
-            log.info(f"Waktu disinkronkan dengan Binance. Offset: {self.client.timestamp_offset} ms")
-        except Exception as e:
-            log.error(f"Gagal sinkronisasi waktu Binance: {e}")
+        await self.sync_time()
 
         await self._set_leverage()
         self.start_balance = await self.get_balance()
@@ -81,12 +90,15 @@ class LiveTrader:
             return True  # Failsafe: anggap ada posisi jika API error
 
     async def get_active_position_details(self) -> str:
-        """Mengambil detail posisi aktif untuk Telegram."""
+        """Mengambil detail posisi aktif dan order terbuka untuk Telegram."""
         try:
             positions = await self.client.futures_position_information(symbol=SYMBOL)
+            msg = ""
+            has_position = False
             for pos in positions:
                 amt = float(pos.get('positionAmt', 0))
                 if amt != 0:
+                    has_position = True
                     side = "LONG 🟢" if amt > 0 else "SHORT 🔴"
                     entry = float(pos.get('entryPrice', 0))
                     mark = float(pos.get('markPrice', 0))
@@ -96,7 +108,7 @@ class LiveTrader:
                     margin_used = (abs(amt) * entry) / float(leverage)
                     roi_pct = (unrealized_pnl / margin_used * 100) if margin_used > 0 else 0
                     
-                    msg = (
+                    msg += (
                         f"📊 <b>POSISI AKTIF: {SYMBOL}</b>\n"
                         f"━━━━━━━━━━━━━━━━\n"
                         f"Arah : {side}\n"
@@ -104,13 +116,38 @@ class LiveTrader:
                         f"Entry: <code>{entry:,.1f}</code> USDT\n"
                         f"Mark : <code>{mark:,.1f}</code> USDT\n"
                         f"PnL  : <code>{unrealized_pnl:+.2f}</code> USDT (<b>{roi_pct:+.2f}%</b>)\n"
-                        f"Lev  : {leverage}x\n"
+                        f"Lev  : {leverage}x\n\n"
                     )
-                    return msg
-            return "✅ <b>STATUS AMAN</b>\nSaat ini tidak ada posisi terbuka (Flat)."
+
+            orders = await self.client.futures_get_open_orders(symbol=SYMBOL)
+            if orders:
+                msg += f"📝 <b>PROTEKSI (SL/TP)</b>\n━━━━━━━━━━━━━━━━\n"
+                sl_found = False
+                tp_found = False
+                for o in orders:
+                    o_type = o.get('type', '')
+                    o_stop_price = float(o.get('stopPrice', 0))
+                    
+                    if o_type == 'STOP_MARKET':
+                        msg += f"🛑 Stop Loss   : <code>{o_stop_price:,.1f}</code> USDT\n"
+                        sl_found = True
+                    elif o_type == 'TAKE_PROFIT_MARKET':
+                        msg += f"🎯 Take Profit : <code>{o_stop_price:,.1f}</code> USDT\n"
+                        tp_found = True
+                        
+                if not sl_found and not tp_found:
+                    msg += "⚠️ <i>Tidak ada SL/TP yang terpasang! (Hanya Limit Entry)</i>\n"
+            else:
+                if not has_position:
+                    return "✅ <b>STATUS AMAN</b>\nSaat ini tidak ada posisi terbuka atau limit order aktif."
+
+            if not msg:
+                return "✅ <b>STATUS AMAN</b>\nSaat ini tidak ada posisi terbuka atau limit order aktif."
+
+            return msg.strip()
         except Exception as e:
             log.error(f"Gagal mengambil detail posisi: {e}")
-            return f"❌ <b>ERROR API</b>\nGagal mengambil posisi:\n<code>{e}</code>"
+            return f"❌ <b>ERROR API</b>\nGagal mengambil posisi dan order:\n<code>{e}</code>"
 
     async def check_kill_switch(self) -> bool:
         """
@@ -366,3 +403,54 @@ class LiveTrader:
                                     )
         except Exception as e:
             log.error(f"Error di manage_trailing_stop: {e}")
+
+    async def log_closed_trade(self):
+        """
+        Mengambil detail trade terakhir yang menutup posisi dari API Binance,
+        lalu mencatatnya ke CSV jika belum dicatat.
+        """
+        try:
+            trades = await self.client.futures_account_trades(symbol=SYMBOL, limit=10)
+            if not trades:
+                return
+
+            # Filter trade yang merealisasikan PnL (berarti menutup sebagian/seluruh posisi)
+            closing_trades = [t for t in trades if float(t.get('realizedPnl', 0)) != 0]
+            if not closing_trades:
+                return
+
+            last_trade = closing_trades[-1]
+            trade_id = last_trade.get('id')
+
+            if self._last_logged_trade_id == trade_id:
+                return  # Sudah dicatat sebelumnya
+
+            self._last_logged_trade_id = trade_id
+
+            pnl = float(last_trade.get('realizedPnl', 0))
+            fee = float(last_trade.get('commission', 0))
+            net_pnl = pnl - fee
+            exit_price = float(last_trade.get('price', 0))
+            qty = float(last_trade.get('qty', 0))
+            
+            # Jika trade penutup adalah BUY, berarti posisi awalnya adalah SHORT.
+            # Jika trade penutup adalah SELL, berarti posisi awalnya adalah LONG.
+            side = "SHORT" if last_trade.get('side') == "BUY" else "LONG"
+            ts_ms = int(last_trade.get('time', 0))
+            dt_str = datetime.fromtimestamp(ts_ms / 1000).strftime('%Y-%m-%d %H:%M:%S')
+
+            os.makedirs("data", exist_ok=True)
+            csv_path = "data/live_trade_journal.csv"
+            file_exists = os.path.exists(csv_path)
+
+            with open(csv_path, 'a', newline='') as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow(["time", "trade_id", "side", "qty", "exit_price", "realized_pnl", "fee", "net_pnl"])
+                
+                writer.writerow([dt_str, trade_id, side, qty, exit_price, pnl, fee, net_pnl])
+
+            log.info(f"✅ Trade Jurnal dicatat: {side} | Net PnL: {net_pnl:.2f} USDT")
+
+        except Exception as e:
+            log.error(f"Gagal mencatat trade jurnal: {e}")

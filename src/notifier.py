@@ -46,12 +46,12 @@ class TelegramNotifier:
         except Exception as e:
             log.error(f"Gagal membalas Telegram ke {chat_id}: {e}")
 
-    async def start_polling(self, trader):
+    async def start_polling(self, trader, engine, strategy):
         if not self.enabled:
             return
         url = f"https://api.telegram.org/bot{self.token}/getUpdates"
         offset = 0
-        log.info("📡 Mulai mendengarkan perintah Telegram (/status, /balance, /kill)...")
+        log.info("📡 Mulai mendengarkan perintah Telegram (/status, /balance, /kill, /market, /ai)...")
         
         while True:
             try:
@@ -80,6 +80,34 @@ class TelegramNotifier:
                                     await self._send_to_chat(chat_id, "🚨 <b>KILL SWITCH AKTIF!</b>\nBot berhenti beroperasi untuk hari ini secara manual.")
                                 elif text == "/ping":
                                     await self._send_to_chat(chat_id, "🏓 <b>PONG!</b> Bot Scalp BTC sedang online.")
+                                elif text == "/market":
+                                    metrics = engine.get_metrics(lookback_seconds=14400)
+                                    price = metrics.get('current_price', metrics.get('vwap', 0))
+                                    
+                                    msg_market = (
+                                        f"📈 <b>KONDISI PASAR (Order Flow)</b>\n"
+                                        f"━━━━━━━━━━━━━━━━\n"
+                                        f"💰 Harga : <code>{price:,.1f}</code>\n"
+                                        f"⚖️ VWAP  : <code>{metrics.get('vwap', 0):,.1f}</code>\n"
+                                        f"📊 CVD   : <code>{metrics.get('cvd', 0):,.1f}</code> BTC\n"
+                                        f"🧱 Imbal : <code>{metrics.get('imbalance', 0):+.2f}</code>\n"
+                                        f"━━━━━━━━━━━━━━━━\n"
+                                        f"📌 <b>Volume Profile (4 Jam):</b>\n"
+                                        f"🔼 VAH : <code>{metrics.get('vah', 0):,.1f}</code>\n"
+                                        f"▶️ POC : <code>{metrics.get('poc', 0):,.1f}</code>\n"
+                                        f"🔽 VAL : <code>{metrics.get('val', 0):,.1f}</code>\n"
+                                    )
+                                    await self._send_to_chat(chat_id, msg_market)
+                                elif text == "/ai":
+                                    params = strategy.current_params
+                                    msg_ai = (
+                                        f"🧠 <b>PARAMETER 9ROUTER AI</b>\n"
+                                        f"━━━━━━━━━━━━━━━━\n"
+                                        f"🛑 CVD Thresh  : <code>{params.get('cvd_divergence_threshold', 0):.2f}</code>\n"
+                                        f"🧱 Imbal Thresh: <code>{params.get('imbalance_threshold', 0):.2f}</code>\n"
+                                        f"📏 VWAP Dist   : <code>{params.get('vwap_distance_pct', 0)*100:.3f}%</code>\n"
+                                    )
+                                    await self._send_to_chat(chat_id, msg_ai)
             except asyncio.TimeoutError:
                 pass
             except Exception as e:
@@ -97,7 +125,7 @@ class TelegramNotifier:
             f"🛑 SL     : <code>{sl:,.1f}</code> USDT\n"
             f"🎯 TP     : <code>{tp:,.1f}</code> USDT\n"
             f"━━━━━━━━━━━━━━━━\n"
-            f"🤖 Divalidasi oleh DeepSeek AI"
+            f"🤖 Divalidasi Parameter 9router AI"
         )
         await self.send(msg)
 
@@ -158,7 +186,7 @@ class TelegramNotifier:
             f"🚀 <b>Bot Scalp BTC Aktif!</b>\n"
             f"━━━━━━━━━━━━━━━━\n"
             f"💰 Saldo Awal : <code>{balance:.4f}</code> USDT\n"
-            f"📊 Strategi  : 5M BB + RSI + ADX + OFI + AI\n"
-            f"🤖 AI Validator: DeepSeek V4 Pro ✅"
+            f"📊 Strategi  : High-Frequency Order Flow\n"
+            f"🤖 AI Tuner  : 9router AI ✅"
         )
         await self.send(msg)

@@ -6,7 +6,7 @@ load_dotenv()
 # API Keys
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY", "")
 BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY", "")
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+AI_API_KEY = os.getenv("AI_API_KEY", "sk-576a2de93e8466b2-zunoj9-5d2d0166")
 BINANCE_TESTNET = os.getenv("BINANCE_TESTNET", "true").lower() == "true"
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_IDS = [x.strip() for x in os.getenv("TELEGRAM_CHAT_ID", "").split(",") if x.strip()]
@@ -20,7 +20,7 @@ TRADE_END_HOUR_UTC = 24    # 24:00 UTC (Tutup 24 Jam)
 
 # Risk Management
 MAX_DAILY_DRAWDOWN_PCT = 0.20
-TRADE_RISK_PCT = 0.01  # Risk 1% per trade
+TRADE_RISK_PCT = 0.05  # Risk 5% per trade
 LEVERAGE = 60
 
 # TP/SL Targets (Risk:Reward Ratio)
@@ -71,8 +71,8 @@ def validate_config():
         errors.append("BINANCE_API_KEY tidak diset di .env")
     if not BINANCE_SECRET_KEY:
         errors.append("BINANCE_SECRET_KEY tidak diset di .env")
-    if not DEEPSEEK_API_KEY:
-        errors.append("DEEPSEEK_API_KEY tidak diset di .env (AI Validator tidak akan berfungsi)")
+    if not AI_API_KEY:
+        errors.append("AI_API_KEY tidak diset di .env (AI Validator tidak akan berfungsi)")
     if not TELEGRAM_BOT_TOKEN:
         errors.append("TELEGRAM_BOT_TOKEN tidak diset di .env")
     if not TELEGRAM_CHAT_IDS:

@@ -1,19 +1,28 @@
 import asyncio
+import os
 import sys
-import logging
+from binance.client import AsyncClient
+from dotenv import load_dotenv
 
-logging.basicConfig(level=logging.INFO)
-
-if sys.platform == 'win32':
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-from src.live_trader import LiveTrader
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+load_dotenv()
 
 async def main():
-    trader = LiveTrader()
-    print("Connecting to Binance...")
-    await trader.initialize()
-    print(f"Your Balance is: {trader.start_balance} USDT")
+    api_key = os.getenv("BINANCE_API_KEY")
+    api_secret = os.getenv("BINANCE_SECRET_KEY")
+    testnet = os.getenv("BINANCE_TESTNET", "true").lower() == "true"
+    
+    print(f"Connecting to Binance (Testnet: {testnet})...")
+    client = await AsyncClient.create(api_key, api_secret, testnet=testnet)
+    
+    try:
+        acc = await client.futures_account()
+        balance = float(acc['totalWalletBalance'])
+        print(f"Actual Balance: {balance} USDT")
+    except Exception as e:
+        print(f"Error fetching balance: {e}")
+    finally:
+        await client.close_connection()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

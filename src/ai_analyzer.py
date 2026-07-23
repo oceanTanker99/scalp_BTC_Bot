@@ -1,168 +1,121 @@
 import json
 import asyncio
 import logging
+import os
 from openai import AsyncOpenAI
-import pandas as pd
-from config.config import DEEPSEEK_API_KEY
+from config.config import AI_API_KEY
 
 log = logging.getLogger(__name__)
 
-# Konfigurasi retry & timeout
-AI_REQUEST_TIMEOUT = 120   # Timeout per request dalam detik
-AI_MAX_RETRIES = 3        # Jumlah retry jika request gagal
+# Konfigurasi
+TUNING_INTERVAL_SECONDS = 3600  # 1 Jam
+PARAMS_FILE = "config/ai_params.json"
+AI_REQUEST_TIMEOUT = 120
 
-class DeepSeekValidator:
-    def __init__(self):
-        self.api_key = DEEPSEEK_API_KEY
+class AITuner:
+    def __init__(self, engine):
+        self.api_key = AI_API_KEY
+        self.engine = engine
+        self._running = True
+        
+        # Default fallback parameters
+        self.default_params = {
+            "cvd_divergence_threshold": 5.0, # Minimum CVD delta to consider valid
+            "imbalance_threshold": 0.3,      # Order book imbalance needed
+            "vwap_distance_pct": 0.1,        # How far from VWAP to trigger
+            "reasoning": "Default system params"
+        }
+        
+        os.makedirs("config", exist_ok=True)
+        if not os.path.exists(PARAMS_FILE):
+            self._save_params(self.default_params)
+            
         if not self.api_key:
-            log.warning("DEEPSEEK_API_KEY tidak ditemukan! Validasi AI dinonaktifkan.")
+            log.warning("AI_API_KEY tidak ditemukan! AI Tuner dinonaktifkan.")
             self.client = None
         else:
+            # Use host.docker.internal to reach the Windows host from inside Docker
             self.client = AsyncOpenAI(
                 api_key=self.api_key,
-                base_url="https://api.deepseek.com/v1",
+                base_url=os.getenv("AI_BASE_URL", "http://host.docker.internal:20128/v1"),
                 timeout=AI_REQUEST_TIMEOUT
             )
 
-    async def validate(self, signal: str, df_5m: pd.DataFrame, ofi: float,
-                       context: dict = None, sentiment: dict = None) -> tuple[bool, str]:
-        """
-        Validasi sinyal menggunakan DeepSeek AI dengan parameter Sentiment.
-        """
+    def _save_params(self, params):
+        try:
+            with open(PARAMS_FILE, "w") as f:
+                json.dump(params, f, indent=4)
+            log.info(f"✅ Parameter AI berhasil diperbarui: {params}")
+        except Exception as e:
+            log.error(f"Gagal menyimpan parameter AI: {e}")
+
+    async def start_tuning_loop(self):
         if not self.client:
-            log.warning("Client DeepSeek tidak aktif. Sinyal DITOLAK untuk keamanan.")
-            return False, "DITOLAK: API key tidak diset"
-
-        ctx = context or {}
-        sent = sentiment or {}
-
-        # Ambil 8 candle terakhir
-        cols_to_show = [c for c in ['timestamp', 'open', 'high', 'low', 'close', 'volume', 'rsi']
-                        if c in df_5m.columns]
-        recent_candles = df_5m.tail(8)[cols_to_show].round(2).to_dict(orient='records')
-
-        price_zone = "Di atas VWAP" if ctx.get('price_vs_vwap_pct', 0) > 0 else "Di bawah VWAP"
-        macro_zone = ("Di atas EMA 200 (Bullish Makro)" if ctx.get('price_vs_ema200_pct', 0) > 0
-                      else "Di bawah EMA 200 (Bearish Makro)")
-        strategy_type = ctx.get('strategy_type', 'MEAN_REVERSION')
+            return
+            
+        log.info("🤖 AI Tuning Layer (Background) mulai berjalan...")
         
-        if strategy_type == 'MEAN_REVERSION':
-            strategy_instruction = """Anda adalah Quant Trader institusional beraliran MEAN-REVERSION (Pemulihan ke Rata-Rata).
-Bot telah mendeteksi sinyal potensial: **{signal}** di grafik 5 Menit BTC/USDT.
-Harga saat ini sedang berada di luar batas wajar (Bollinger Bands) dan ada potensi memantul kembali ke tengah.
-            """
-            evaluation_instruction = """
-Pertimbangkan:
-1. Sentimen Derivatives: Apakah Funding Rate terlalu berlawanan? Apakah Top Traders sedang berada di sisi yang berlawanan dengan sinyal ini? (Misal: Sinyal Long tapi Top L/S < 0.95, artinya paus sedang nge-Short).
-2. Apakah harga benar-benar sudah "terlalu jauh dari equilibrium" (VWAP/EMA 200) dan siap memantul?
-3. Apakah aksi harga di 8 candle terakhir mendukung atau menentang potensi reversal?
-4. Apakah ada tanda-tanda momentum berlanjut (bearish engulfing, volume terus naik saat turun) yang menunjukkan ini BUKAN reversal tapi continuation?
-            """
-        elif strategy_type == 'SMC_FVG':
-            strategy_instruction = """Anda adalah Quant Trader institusional beraliran SMART MONEY CONCEPTS (SMC).
-Bot telah mendeteksi sinyal potensial: **{signal}** di grafik 5 Menit BTC/USDT berdasarkan mitigasi Fair Value Gap (FVG).
-Harga baru saja masuk kembali ke area celah kosong yang ditinggalkan oleh pelarian harga institusional (Displacement).
-            """
-            evaluation_instruction = """
-Pertimbangkan:
-1. Sentimen Derivatives: Apakah mayoritas paus (Top L/S Ratio) mendukung arah FVG ini?
-2. Konteks Harga: Apakah FVG ini terjadi searah dengan tren makro (EMA 200)? Jika melawan tren makro, pastikan ada tanda pelemahan yang sangat kuat.
-3. Apakah aksi harga di 8 candle terakhir menunjukkan penolakan (rejection wick) saat menyentuh FVG, atau malah menembusnya dengan agresif?
-4. Tolak jika harga terlihat menembus zona FVG dengan volume yang makin membesar (momentum berlawanan arah sangat kuat).
-            """
-        else:
-            strategy_instruction = """Anda adalah Quant Trader institusional beraliran TREND-FOLLOWING (Pengikut Tren).
-Bot telah mendeteksi sinyal potensial: **{signal}** di grafik 5 Menit BTC/USDT.
-Pasar sedang berada dalam tren MAHA KUAT (Dikonfirmasi oleh ADX, DMI, dan Jarak Makro EMA 800).
-Ini adalah setup "Buy on Dip" (Pullback ke garis EMA 20) atau "Breakout" searah dengan tren makro.
-            """
-            evaluation_instruction = """
-Pertimbangkan:
-1. Sentimen Derivatives: Apakah mayoritas ritel melawan tren ini (Funding Rate sangat negatif tapi harga naik terus)? Jika ya, itu bensin tambahan untuk trend.
-2. Pullback/Breakout: Apakah volume mengering saat harga pullback (konsolidasi sehat), dan siap melonjak lagi?
-3. Jangan takut untuk menyetujui sinyal jika harga memang sedang pullback dangkal di tengah tren yang sangat kuat.
-4. Tolak jika ada pola pembalikan arah skala besar (misal: Head and Shoulders, volume buang barang raksasa di pucuk).
-            """
-
-        prompt = f"""{strategy_instruction}
-═══ DATA SENTIMEN DERIVATIVES (BINANCE) ═══
-Funding Rate          : {sent.get('funding_rate', 0)*100:.4f}%
-Open Interest         : {sent.get('open_interest', 0):,.0f}
-Top L/S Ratio (Paus)  : {sent.get('top_long_short_ratio', 1.0):.2f} ( >1: Banyak Long, <1: Banyak Short)
-Global L/S Ratio      : {sent.get('global_long_short_ratio', 1.0):.2f}
-
-═══ SNAPSHOT INDIKATOR SAAT INI ═══
-Tipe Strategi  : {strategy_type}
-Harga          : {ctx.get('price', 'N/A')} USDT
-RSI (7)        : {ctx.get('rsi', 'N/A')}
-Bollinger Low  : {ctx.get('bbl', 'N/A')} | Bollinger High: {ctx.get('bbh', 'N/A')}
-BB Width       : {ctx.get('bb_width_pct', 'N/A')}%
-VWAP (Harian)  : {ctx.get('vwap', 'N/A')} → Harga {price_zone} ({ctx.get('price_vs_vwap_pct', 'N/A')}%)
-EMA 200 (15m)  : {ctx.get('ema_200_15m', 'N/A')} → {macro_zone} ({ctx.get('price_vs_ema200_pct', 'N/A')}%)
-EMA 800 (15m)  : {ctx.get('ema_800_15m', 'N/A')} (Macro Baseline)
-ADX (Tren)     : {ctx.get('adx', 'N/A')} (Tren Kuat jika > 25)
-DMI (+DI/-DI)  : +DI {ctx.get('dmp', 'N/A')} | -DI {ctx.get('dmn', 'N/A')}
-ATR Volatilitas: {ctx.get('atr', 'N/A')} ({ctx.get('atr_pct', 'N/A')}% dari harga)
-OFI Orderbook  : {ofi:.2f} {'(Dominasi Beli ✓)' if ofi > 0 else '(Dominasi Jual)'}
-Volume Spike   : {'YA 🔥' if ctx.get('volume_spike') else 'Tidak'}
-Skor Sinyal    : {ctx.get('score', 'N/A')}/5
-
-═══ 8 CANDLE TERAKHIR (5 MENIT) ═══
-{json.dumps(recent_candles, indent=2)}
-
-═══ TUGAS ANDA ═══
-Berdasarkan seluruh data di atas, tentukan apakah sinyal **{signal}** ini layak dieksekusi.
-{evaluation_instruction}
-
-Jawab HANYA dengan format JSON berikut, tanpa teks lain:
-{{
-  "reasoning": "analisis Anda dalam 2-3 kalimat yang mencakup sentimen, price action, dan kecocokan dengan {strategy_type}",
-  "approved": true atau false
-}}"""
-
-        # --- Retry loop ---
-        last_error = None
-        for attempt in range(1, AI_MAX_RETRIES + 1):
+        while self._running:
             try:
-                log.info(
-                    f"🧠 Meminta validasi DeepSeek untuk sinyal {signal} "
-                    f"(skor: {ctx.get('score', '?')}/5, percobaan {attempt}/{AI_MAX_RETRIES})..."
-                )
+                # Ambil data makro 4 jam terakhir
+                metrics_4h = self.engine.get_metrics(lookback_seconds=14400)
+                
+                # Cek jika data sudah cukup lewat ketersediaan VWAP dan POC
+                if metrics_4h.get('vwap', 0) == 0 or metrics_4h.get('poc', 0) == 0:
+                    log.info("Data belum cukup untuk AI Tuning. Skip siklus ini.")
+                    await asyncio.sleep(60)
+                    continue
+                    
+                prompt = f"""Anda adalah "Quantitative Strategist" untuk mesin High-Frequency Order Flow.
+Tugas Anda adalah meracik parameter sensitivitas eksekusi (Thresholds) untuk mesin Python lokal, berdasarkan metrik 4 Jam terakhir.
 
+Data 4 Jam Terakhir:
+- CVD (Delta Volume): {metrics_4h.get('cvd', 0)}
+- VWAP: {metrics_4h.get('vwap', 0)}
+- Orderbook Imbalance Rata-Rata: {metrics_4h.get('imbalance', 0)}
+- Total CVD (Delta): {metrics_4h.get('cvd', 0)}
+- Orderbook Imbalance Rata-Rata: {metrics_4h.get('imbalance', 0)}
+
+Volume Profile (4 Jam):
+- Harga Saat Ini: {metrics_4h.get('current_price', 0)}
+- POC (Point of Control): {metrics_4h.get('poc', 0)}
+- VAH (Value Area High): {metrics_4h.get('vah', 0)}
+- VAL (Value Area Low): {metrics_4h.get('val', 0)}
+
+Tentukan threshold yang optimal untuk scalping saat ini:
+1. `cvd_divergence_threshold`: Batas deviasi CVD yang dianggap sebagai sinyal valid (biasanya antara 1.0 hingga 15.0 tergantung volatilitas).
+2. `imbalance_threshold`: Persentase dominasi Orderbook (misal 0.2 untuk 20% imbalance).
+3. `vwap_distance_pct`: Jarak persentase dari VWAP untuk mendeteksi over-extension (misal 0.05 hingga 0.2).
+
+Keluarkan HANYA JSON murni dengan format:
+{{
+    "cvd_divergence_threshold": float,
+    "imbalance_threshold": float,
+    "vwap_distance_pct": float,
+    "reasoning": "Alasan analisis makro singkat"
+}}
+"""
+                log.info("🧠 Meminta 9router menganalisis dan menyetel ulang parameter strategi...")
                 response = await self.client.chat.completions.create(
-                    model="deepseek-v4-pro",
+                    model="freetier", # 9router will route this appropriately
                     messages=[
-                        {
-                            "role": "system",
-                            "content": (f"You are an elite institutional quantitative trader "
-                                        f"specializing in {strategy_type} strategies. Output only strict JSON.")
-                        },
+                        {"role": "system", "content": "You are an elite quantitative strategist tuning an HFT bot. Output JSON only."},
                         {"role": "user", "content": prompt}
                     ],
-                    response_format={"type": "json_object"},
-                    extra_body={"reasoning_effort": "medium"}
+                    response_format={"type": "json_object"}
                 )
-
+                
                 result_str = response.choices[0].message.content
                 result_json = json.loads(result_str)
-
-                reasoning = result_json.get('reasoning', '-')
-                is_approved = result_json.get('approved', False)
-
-                log.info(f"[DEEPSEEK] {'✅ DISETUJUI' if is_approved else '❌ DITOLAK'} | {reasoning}")
-                await asyncio.sleep(3)  # Rate limit cooldown
-                return is_approved, reasoning
-
-            except json.JSONDecodeError as e:
-                log.error(f"DeepSeek mengembalikan JSON tidak valid (percobaan {attempt}): {e}")
-                last_error = "JSON decode error"
+                
+                # Validasi kunci
+                if "cvd_divergence_threshold" in result_json:
+                    self._save_params(result_json)
+                    
+            except json.JSONDecodeError:
+                log.error("AI mengembalikan JSON yang tidak valid.")
             except Exception as e:
-                log.error(f"DeepSeek API error (percobaan {attempt}): {e}")
-                last_error = str(e)
-
-                if attempt < AI_MAX_RETRIES:
-                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
-
-        # Semua percobaan gagal — tolak sinyal untuk keamanan
-        log.warning(f"⚠️ Semua {AI_MAX_RETRIES} percobaan DeepSeek gagal. Sinyal ditolak untuk keamanan.")
-        return False, f"AI gagal setelah {AI_MAX_RETRIES} percobaan: {last_error}"
+                log.error(f"Error pada siklus AI Tuning: {e}")
+                
+            # Tunggu 1 jam untuk siklus berikutnya
+            await asyncio.sleep(TUNING_INTERVAL_SECONDS)

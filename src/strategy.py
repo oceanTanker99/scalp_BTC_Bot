@@ -1,368 +1,84 @@
-import pandas as pd
-import pandas_ta as ta
-import logging
-from datetime import datetime, timezone
-import csv
+import json
 import os
-from config.config import (
-    BOLLINGER_PERIOD, BOLLINGER_STD, RSI_PERIOD, RSI_OVERSOLD, RSI_OVERBOUGHT,
-    TRADE_START_HOUR_UTC, TRADE_END_HOUR_UTC, ATR_PERIOD, ATR_MULTIPLIER,
-    EMA_MTF_PERIOD, ADX_PERIOD, ADX_THRESHOLD, STRONG_TREND_ADX, OFI_BOOST_THRESHOLD,
-    VOLUME_SPIKE_MULTIPLIER, MIN_BB_WIDTH_MR, MIN_BB_WIDTH_TF,
-    MIN_SIGNAL_SCORE
-)
+import logging
 
 log = logging.getLogger(__name__)
 
 class StrategyEngine:
     def __init__(self):
-        self.log_file = "logs/analysis_report.csv"
-        os.makedirs("logs", exist_ok=True)
-        if not os.path.exists(self.log_file):
-            with open(self.log_file, mode='w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow([
-                    "timestamp_utc", "price", "rsi", "bbl", "bbh", "bb_width",
-                    "vwap", "adx", "ema_200", "ofi", "volume_spike",
-                    "score", "signal", "sl_distance", "reject_reason"
-                ])
-
-        # State FVG (Dual-Engine)
-        self.active_bullish_fvgs = []
-        self.active_bearish_fvgs = []
-
-    def _analyze_fvg(self, df_5m: pd.DataFrame, current_15m: pd.Series):
-        if len(df_5m) < 3:
-            return "NEUTRAL", 0.0, 0.0, {}
-
-        current = df_5m.iloc[-1]
-        prev1 = df_5m.iloc[-2]
-        prev2 = df_5m.iloc[-3]
+        self.params_file = "config/ai_params.json"
         
-        price = current['close']
-        avg_vol = (current['volume'] + prev1['volume'] + prev2['volume']) / 3
-        
-        # Bullish FVG
-        if current['low'] > prev2['high'] and prev1['volume'] > avg_vol * 1.5:
-            fvg_top = current['low']
-            fvg_bottom = prev2['high']
-            gap_size_pct = (fvg_top - fvg_bottom) / price * 100
-            if gap_size_pct > 0.05:
-                self.active_bullish_fvgs.append({"top": fvg_top, "bottom": fvg_bottom, "time": current['timestamp']})
-            
-        # Bearish FVG
-        if current['high'] < prev2['low'] and prev1['volume'] > avg_vol * 1.5:
-            fvg_top = prev2['low']
-            fvg_bottom = current['high']
-            gap_size_pct = (fvg_top - fvg_bottom) / price * 100
-            if gap_size_pct > 0.05:
-                self.active_bearish_fvgs.append({"top": fvg_top, "bottom": fvg_bottom, "time": current['timestamp']})
-            
-        self.active_bullish_fvgs = self.active_bullish_fvgs[-5:]
-        self.active_bearish_fvgs = self.active_bearish_fvgs[-5:]
-
-        signal = "NEUTRAL"
-        sl_distance = 0.0
-        
-        for fvg in self.active_bullish_fvgs[:]:
-            if fvg['bottom'] <= current['low'] <= fvg['top'] or fvg['bottom'] <= current['close'] <= fvg['top']:
-                signal = "LONG"
-                sl_distance = (price - fvg['bottom'] * 0.999) / price
-                self.active_bullish_fvgs.remove(fvg)
-                break
-                
-        if signal == "NEUTRAL":
-            for fvg in self.active_bearish_fvgs[:]:
-                if fvg['bottom'] <= current['high'] <= fvg['top'] or fvg['bottom'] <= current['close'] <= fvg['top']:
-                    signal = "SHORT"
-                    sl_distance = (fvg['top'] * 1.001 - price) / price
-                    self.active_bearish_fvgs.remove(fvg)
-                    break
-                    
-        self.active_bullish_fvgs = [f for f in self.active_bullish_fvgs if current['close'] > f['bottom']]
-        self.active_bearish_fvgs = [f for f in self.active_bearish_fvgs if current['close'] < f['top']]
-
-        if sl_distance <= 0:
-            sl_distance = 0.005
-
-        context = {
-            "strategy_type": "SMC_FVG",
-            "active_bull_fvgs": len(self.active_bullish_fvgs),
-            "active_bear_fvgs": len(self.active_bearish_fvgs)
+        # In-memory cache of params to avoid excessive disk I/O
+        self.current_params = {
+            "cvd_divergence_threshold": 5.0,
+            "imbalance_threshold": 0.3,
+            "vwap_distance_pct": 0.1
         }
-        
-        return signal, price, sl_distance, context
+        self.last_load_time = 0
 
-    def analyze(self, df_1m: pd.DataFrame, df_5m: pd.DataFrame, df_15m: pd.DataFrame, ofi: float):
+    def _load_params(self):
+        # Only reload every few seconds if needed, or rely on file modified time
+        try:
+            if os.path.exists(self.params_file):
+                with open(self.params_file, "r") as f:
+                    params = json.load(f)
+                    self.current_params.update(params)
+        except Exception as e:
+            log.error(f"Error loading AI params: {e}")
+
+    def analyze_order_flow(self, metrics: dict):
         """
-        Analyze the market and return a signal using a multi-factor scoring system.
-
+        Mengevaluasi sinyal trading murni menggunakan matematika (milidetik).
+        Menerima dict 'metrics' yang berisi data 15m, 1h, dan 4h.
+        
         Returns:
             signal (str): 'LONG', 'SHORT', or 'NEUTRAL'
             price (float): current price
             sl_distance (float): dynamic stop loss distance (as fraction of price)
-            context (dict): full indicator snapshot for AI enrichment
         """
-        # --- Filter Jam Trading ---
-        current_hour_utc = datetime.now(timezone.utc).hour
-        if current_hour_utc < TRADE_START_HOUR_UTC or current_hour_utc >= TRADE_END_HOUR_UTC:
-            return "NEUTRAL", 0.0, 0.0, {}
-
-        if len(df_5m) < BOLLINGER_PERIOD + 5 or len(df_15m) < EMA_MTF_PERIOD:
-            return "NEUTRAL", 0.0, 0.0, {}
-
-        # ── Hitung Indikator ──────────────────────────────────────────────────
-
-        # RSI
-        df_5m = df_5m.copy()
-        df_5m['rsi'] = ta.rsi(df_5m['close'], length=RSI_PERIOD)
-
-        # Bollinger Bands
-        bbands = ta.bbands(df_5m['close'], length=BOLLINGER_PERIOD, std=BOLLINGER_STD)
-        if bbands is not None:
-            df_5m = pd.concat([df_5m, bbands], axis=1)
-
-        # ADX & ATR
-        adx_df = ta.adx(df_5m['high'], df_5m['low'], df_5m['close'], length=ADX_PERIOD)
-        if adx_df is not None:
-            df_5m = pd.concat([df_5m, adx_df], axis=1)
-
-        atr_series = ta.atr(df_5m['high'], df_5m['low'], df_5m['close'], length=ATR_PERIOD)
-        if atr_series is not None:
-            df_5m['atr'] = atr_series
-
-        # EMA 200 & EMA 800 di 15m (Macro Trend)
-        df_15m = df_15m.copy()
-        df_15m['ema_200'] = ta.ema(df_15m['close'], length=EMA_MTF_PERIOD)
-        df_15m['ema_800'] = ta.ema(df_15m['close'], length=800)
-
-        # VWAP dengan Daily Reset (00:00 UTC)
-        df_5m['date_utc'] = pd.to_datetime(df_5m['timestamp'], unit='ms', utc=True).dt.date
-        df_5m['typical_price'] = (df_5m['high'] + df_5m['low'] + df_5m['close']) / 3
+        self._load_params()
         
-        # Gunakan kolom sementara untuk menghindari bug apply() di Pandas >= 2.2
-        df_5m['tp_vol'] = df_5m['typical_price'] * df_5m['volume']
-        df_5m['cum_tp_vol'] = df_5m.groupby('date_utc')['tp_vol'].cumsum()
-        df_5m['cum_vol'] = df_5m.groupby('date_utc')['volume'].cumsum()
-        df_5m['vwap'] = df_5m['cum_tp_vol'] / df_5m['cum_vol']
-
-        # Volume Moving Average (untuk deteksi volume spike)
-        df_5m['volume_ma'] = df_5m['volume'].rolling(window=20).mean()
-
-        # ── Ambil Nilai Terkini ───────────────────────────────────────────────
-        current = df_5m.iloc[-1]
-        current_15m = df_15m.iloc[-1]
-
-        bbl_col = [col for col in df_5m.columns if col.startswith('BBL_')][0]
-        bbh_col = [col for col in df_5m.columns if col.startswith('BBU_')][0]
-        bbm_col = [col for col in df_5m.columns if col.startswith('BBM_')][0]
-        adx_col = [col for col in df_5m.columns if col.startswith('ADX_')][0]
-        dmp_col = [col for col in df_5m.columns if col.startswith('DMP_')][0]
-        dmn_col = [col for col in df_5m.columns if col.startswith('DMN_')][0]
-
-        required_cols = [bbl_col, bbh_col, bbm_col, adx_col, dmp_col, dmn_col, 'rsi', 'atr', 'vwap', 'volume_ma']
-        if any(col not in df_5m.columns or pd.isna(current.get(col, float('nan'))) for col in required_cols):
-            return "NEUTRAL", current['close'], 0.0, {}
-        if pd.isna(current_15m['ema_200']) or pd.isna(current_15m['ema_800']):
-            return "NEUTRAL", current['close'], 0.0, {}
-
-        # ── DeepSeek FVG Engine (Priority) ────────────────────────────────────
-        fvg_signal, fvg_price, fvg_sl_dist, fvg_ctx = self._analyze_fvg(df_5m, current_15m)
-        if fvg_signal != "NEUTRAL":
-            ema_200 = current_15m['ema_200']
-            fvg_ctx['price_vs_ema200_pct'] = round(((fvg_price - ema_200) / ema_200) * 100, 3)
-            return fvg_signal, fvg_price, fvg_sl_dist, fvg_ctx
-
-        # ── Mean Reversion & Trend Following Engine ───────────────────────────
-        price       = current['close']
-        rsi         = current['rsi']
-        bbl         = current[bbl_col]
-        bbh         = current[bbh_col]
-        adx         = current[adx_col]
-        atr         = current['atr']
-        vwap        = current['vwap']
-        ema_200     = current_15m['ema_200']
-        ema_800     = current_15m['ema_800']
-        dmp         = current[dmp_col]
-        dmn         = current[dmn_col]
-        bbm         = current[bbm_col]
-        volume      = current['volume']
-        volume_ma   = current['volume_ma']
-
-        sl_distance = (atr * ATR_MULTIPLIER) / price
-
-        # ── Kalkulasi Derivatif ───────────────────────────────────────────────
-
-        # BB Width (untuk squeeze detection)
-        bb_width = (bbh - bbl) / price
-
-        # Volume Spike
-        is_volume_spike = volume > (volume_ma * VOLUME_SPIKE_MULTIPLIER)
-
-        # ── DeepSeek R1: Metrik Anti-Stop-Hunt (PSO) & Pure Loss (Dihapus) ─────────────
-        # Filter PSO lokal telah dihapus karena AI (DeepSeek) terbukti jauh lebih 
-        # akurat dalam menilai konteks secara keseluruhan tanpa batasan rumus kaku.
-
-        # ── Perbaikan #5: BB Squeeze Detection ───────────────────────────────
-        if bb_width < MIN_BB_WIDTH_MR:
-            reason = f"BB Squeeze (width={bb_width:.4f} < {MIN_BB_WIDTH_MR})"
-            self._log_csv(current, price, rsi, bbl, bbh, bb_width, vwap, adx,
-                          ema_200, ofi, is_volume_spike, 0, "NEUTRAL (BB Squeeze)", sl_distance, reason)
-            return "NEUTRAL", price, sl_distance, {}
-
-        # ── Perbaikan #1: Filter Tren — hanya EMA 200, tanpa VWAP ────────────
-        is_bullish_macro = price > ema_200   # Harga di atas EMA 200 (15m) → tren bullish
-        is_bearish_macro = price < ema_200   # Harga di bawah EMA 200 (15m) → tren bearish
-
-        # ── Perbaikan #2: Trigger dengan RSI 30/70 ───────────────────────────
-        long_bb_touch  = price <= bbl * 1.001   # Harga menyentuh/menembus BB bawah
-        short_bb_touch = price >= bbh * 0.999   # Harga menyentuh/menembus BB atas
-
-        long_rsi_ok  = rsi < RSI_OVERSOLD    # RSI oversold (< 30)
-        short_rsi_ok = rsi > RSI_OVERBOUGHT  # RSI overbought (> 70)
-
-        # ── DUAL-ENGINE: Regime Detection (Triple Confirmation) ───────────────
-        is_trending_bull = False
-        is_trending_bear = False
-        dist_ema800_pct = (price - ema_800) / ema_800 * 100
-        dist_ema200_pct = (price - ema_200) / ema_200 * 100
+        m_15m = metrics.get('15m', {})
         
-        if adx > STRONG_TREND_ADX and bb_width > MIN_BB_WIDTH_TF:
-            if dist_ema800_pct > 1.5 and dmp > dmn + 10:
-                is_trending_bull = True
-            elif dist_ema800_pct < -1.5 and dmn > dmp + 10:
-                is_trending_bear = True
-                
-        strategy_type = "MEAN_REVERSION"
-        if is_trending_bull or is_trending_bear:
-            strategy_type = "TREND_FOLLOWING"
-
-        signal = "NEUTRAL"
-        score = 0
-        reject_reason = "Kondisi tidak terpenuhi"
-
-        if strategy_type == "MEAN_REVERSION":
-            # ML Constraint: Tolak jika ADX > 30 atau BB Width < 0.5%
-            if adx > ADX_THRESHOLD:
-                reason = f"ADX Terlalu Tinggi ({adx:.1f} > {ADX_THRESHOLD})"
-                self._log_csv(current, price, rsi, bbl, bbh, bb_width, vwap, adx,
-                              ema_200, ofi, is_volume_spike, 0, f"NEUTRAL (ADX>{ADX_THRESHOLD})", sl_distance, reason)
-                return "NEUTRAL", price, sl_distance, {}
-
-            for direction in ['LONG', 'SHORT']:
-                score = 0
-                bb_touch  = long_bb_touch  if direction == 'LONG' else short_bb_touch
-                rsi_ok    = long_rsi_ok    if direction == 'LONG' else short_rsi_ok
-                macro_ok  = is_bullish_macro if direction == 'LONG' else is_bearish_macro
-                ofi_ok    = ofi > OFI_BOOST_THRESHOLD if direction == 'LONG' else ofi < -OFI_BOOST_THRESHOLD
-
-                if not (bb_touch and rsi_ok):
-                    continue  # Trigger utama wajib ada
-
-                # ── Injeksi Filter PSO & Pure Loss telah dihapus ────────────────────
-                # Semua raw signals diteruskan ke AI untuk dinilai
-
-                score += 2
-
-                if macro_ok:
-                    score += 1
-                else:
-                    reject_reason = f"Tren Makro EMA 200 berlawanan (price={price:.1f}, ema200={ema_200:.1f})"
-                    continue
-
-                if ofi_ok: score += 1
-                if is_volume_spike: score += 1
-
-                if score >= MIN_SIGNAL_SCORE:
-                    signal = direction
-                    reject_reason = ""
-                    log.info(
-                        f"[MR SIGNAL] {direction} | Score: {score}/5 | Price: {price:.1f} | "
-                        f"RSI: {rsi:.1f} | ADX: {adx:.1f} | OFI: {ofi:.3f} | BBW: {bb_width:.4f}"
-                    )
-                    break
-                else:
-                    reject_reason = f"Skor MR tidak cukup ({score}/{MIN_SIGNAL_SCORE} min)"
-                    
-        else: # TREND_FOLLOWING
-            for direction in ['LONG', 'SHORT']:
-                score = 0
-                if direction == 'LONG' and is_trending_bull:
-                    bbm_touch = price <= bbm * 1.002 and price >= bbm * 0.998
-                    breakout = price > bbh and is_volume_spike
-                    
-                    if bbm_touch or breakout:
-                        score += 2
-                        if ofi > OFI_BOOST_THRESHOLD: score += 1
-                        if rsi < 70: score += 1
-                        if price > vwap: score += 1
-                        
-                        if score >= MIN_SIGNAL_SCORE:
-                            signal = 'LONG'
-                            reject_reason = ""
-                            log.info(f"[TF SIGNAL] LONG | Score: {score}/5 | Breakout: {breakout} | BBM: {bbm_touch}")
-                            break
-                        else:
-                            reject_reason = f"Skor TF LONG tidak cukup ({score}/{MIN_SIGNAL_SCORE})"
-                            
-                elif direction == 'SHORT' and is_trending_bear:
-                    bbm_touch = price >= bbm * 0.998 and price <= bbm * 1.002
-                    breakout = price < bbl and is_volume_spike
-                    
-                    if bbm_touch or breakout:
-                        score += 2
-                        if ofi < -OFI_BOOST_THRESHOLD: score += 1
-                        if rsi > 30: score += 1
-                        if price < vwap: score += 1
-                        
-                        if score >= MIN_SIGNAL_SCORE:
-                            signal = 'SHORT'
-                            reject_reason = ""
-                            log.info(f"[TF SIGNAL] SHORT | Score: {score}/5 | Breakout: {breakout} | BBM: {bbm_touch}")
-                            break
-                        else:
-                            reject_reason = f"Skor TF SHORT tidak cukup ({score}/{MIN_SIGNAL_SCORE})"
-
-        # ── Susun Konteks untuk AI ────────────────────────────────────────────
-        context = {
-            "price": round(price, 2),
-            "rsi": round(rsi, 2),
-            "bbl": round(bbl, 2),
-            "bbh": round(bbh, 2),
-            "bb_width_pct": round(bb_width * 100, 3),
-            "vwap": round(vwap, 2),
-            "price_vs_vwap_pct": round(((price - vwap) / vwap) * 100, 3),
-            "ema_200_15m": round(ema_200, 2),
-            "price_vs_ema200_pct": round(((price - ema_200) / ema_200) * 100, 3),
-            "ema_800_15m": round(ema_800, 2),
-            "strategy_type": strategy_type,
-            "dmp": round(dmp, 2),
-            "dmn": round(dmn, 2),
-            "adx": round(adx, 2),
-            "atr": round(atr, 2),
-            "atr_pct": round((atr / price) * 100, 3),
-            "ofi": round(ofi, 4),
-            "volume_spike": is_volume_spike,
-            "score": score,
-        }
-
-        # ── Log ke CSV ────────────────────────────────────────────────────────
-        self._log_csv(current, price, rsi, bbl, bbh, bb_width, vwap, adx,
-                      ema_200, ofi, is_volume_spike, score, signal, sl_distance, reject_reason)
-
-        return signal, price, sl_distance, context
-
-    def _log_csv(self, current, price, rsi, bbl, bbh, bb_width, vwap, adx,
-                 ema_200, ofi, volume_spike, score, signal, sl_distance, reject_reason):
-        try:
-            with open(self.log_file, mode='a', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-                writer.writerow([
-                    ts, price, round(rsi, 2), round(bbl, 2), round(bbh, 2),
-                    round(bb_width, 4), round(vwap, 2), round(adx, 2), round(ema_200, 2),
-                    round(ofi, 4), volume_spike, score, signal,
-                    round(sl_distance, 4), reject_reason
-                ])
-        except Exception as e:
-            log.error(f"Error writing to analysis CSV: {e}")
+        current_price = m_15m.get('current_price', 0)
+        cvd = m_15m.get('cvd', 0)
+        imbalance = m_15m.get('imbalance', 0)
+        vwap = m_15m.get('vwap', 0)
+        poc = m_15m.get('poc', 0)
+        vah = m_15m.get('vah', 0)
+        val = m_15m.get('val', 0)
+        
+        if current_price == 0 or vwap == 0:
+            return "NEUTRAL", 0.0, 0.0
+            
+        cvd_thresh = self.current_params.get("cvd_divergence_threshold", 5.0)
+        imb_thresh = self.current_params.get("imbalance_threshold", 0.3)
+        vwap_pct = self.current_params.get("vwap_distance_pct", 0.1)
+        
+        dist_to_vwap = (current_price - vwap) / vwap * 100
+        
+        # Volume Profile Golden Setup Checks (0.2% tolerance)
+        is_undervalued = (current_price <= val * 1.002) if val > 0 else True
+        is_overvalued = (current_price >= vah * 0.998) if vah > 0 else True
+        
+        # --- LONG LOGIC ---
+        # 1. Harga di bawah VWAP sejauh batas over-extension (oversold)
+        # 2. Harga di dekat atau di bawah Value Area Low (Undervalued)
+        # 3. CVD Positif (Taker Buy dominan)
+        # 4. Orderbook Imbalance Positif (Bids > Asks)
+        if dist_to_vwap < -vwap_pct and cvd > cvd_thresh and imbalance > imb_thresh and is_undervalued:
+            log.info(f"[ORDER FLOW] LONG SIGNAL DETECTED | Price: {current_price} | VAL: {val:.1f} | CVD: {cvd:.1f} | Imbalance: {imbalance:.2f}")
+            sl_distance = max(0.005, abs(dist_to_vwap / 100) / 2) # SL at half the VWAP distance
+            return "LONG", current_price, sl_distance
+            
+        # --- SHORT LOGIC ---
+        # 1. Harga di atas VWAP sejauh batas over-extension (overbought)
+        # 2. Harga di dekat atau di atas Value Area High (Overvalued)
+        # 3. CVD Negatif (Taker Sell dominan)
+        # 4. Orderbook Imbalance Negatif (Asks > Bids)
+        if dist_to_vwap > vwap_pct and cvd < -cvd_thresh and imbalance < -imb_thresh and is_overvalued:
+            log.info(f"[ORDER FLOW] SHORT SIGNAL DETECTED | Price: {current_price} | VAH: {vah:.1f} | CVD: {cvd:.1f} | Imbalance: {imbalance:.2f}")
+            sl_distance = max(0.005, abs(dist_to_vwap / 100) / 2)
+            return "SHORT", current_price, sl_distance
+            
+        return "NEUTRAL", current_price, 0.0

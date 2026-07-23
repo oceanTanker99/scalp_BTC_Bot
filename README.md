@@ -8,9 +8,13 @@ Bot trading algoritma otomatis yang beroperasi **24 Jam Nonstop** dan dirancang 
 
 ---
 
-## 🧠 Strategi Inti (Multi-Factor Scoring System)
+## 🧠 Arsitektur Dual-Engine & Strategi Inti
 
-Bot menggunakan sistem skor 5 poin yang menggabungkan beberapa lapisan analisis teknikal dan kuantitatif:
+Bot ini dibangun menggunakan **Dual-Layer Architecture** untuk menjamin kecepatan eksekusi tanpa mengorbankan kecerdasan buatan:
+- **Execution Layer (Rust Engine):** Seluruh kalkulasi tingkat *tick* seperti *Volume Profile*, *Value Area* (VAH/VAL/POC), VWAP, dan CVD (*Cumulative Volume Delta*) dijalankan di memori Rust (O(1) kompleksitas waktu) via C-FFI. Menjamin tidak ada antrean yang tersumbat meskipun pasar sangat *volatile*.
+- **Tuning Layer (Python + AI):** Lapisan atas menggunakan Python dan DeepSeek V4 Pro untuk membaca kondisi makro secara periodik tanpa memblokir jalur eksekusi utama.
+
+Sistem skor 5 poin menggabungkan beberapa lapisan analisis:
 
 1. **Macro Trend Filter (EMA 200 — 15m):** Bot memastikan kita tidak melawan tren pasar makro. Jika harga di atas EMA 200 pada timeframe 15 menit, bot hanya mencari peluang *Long*, dan sebaliknya. **(Wajib — 1 poin)**
 2. **Mean-Reversion Trigger (Bollinger Bands + RSI — 5m):** Mendeteksi momen "koreksi berlebihan" dengan membaca harga yang menyentuh batas Bollinger Band (Deviasi 2.0) bersamaan dengan RSI yang menunjukkan kondisi jenuh (30/70). **(Wajib — 2 poin)**
@@ -80,6 +84,8 @@ docker compose down
 
 Bot ini dilengkapi dengan *Long-Polling* interaktif via Telegram. Kirim pesan ke bot Telegram Anda dengan perintah berikut:
 - `/status`  — Melihat detail posisi trading yang saat ini sedang aktif (Entry, Harga Saat ini, PnL, ROE).
+- `/market`  — Melihat metrik *Order Flow* terkini (VWAP, CVD, Imbalance) dan *Volume Profile* 4-Jam (VAH, POC, VAL) dari Rust Engine.
+- `/ai`      — Melihat parameter *tuning* terbaru yang disuntikkan oleh 9Router AI.
 - `/balance` — Mengecek saldo dompet (*wallet balance*) Anda di Binance Futures.
 - `/kill`    — **Kill Switch Manual!** Memaksa bot untuk berhenti mengeksekusi *trade* selama sisa hari itu (akan me-reset otomatis keesokan harinya di 00:00 UTC).
 - `/ping`    — Memeriksa apakah *server* bot Anda masih merespons.
@@ -100,17 +106,25 @@ Bot ini dilengkapi dengan *Long-Polling* interaktif via Telegram. Kirim pesan ke
 ```
 scalp_BTC_Bot/
 ├── main.py                    # Titik masuk utama, orkestrator sistem
+├── run_backtest.py            # Skrip untuk simulasi backtest masa lalu
+├── run_parallel.py            # Skrip backtest paralel multifaktor
 ├── config/
 │   └── config.py              # Parameter inti, pengaturan leverage 60x, dll
+├── rust_engine/               # [BARU] Mesin Kalkulasi O(1) berbasis Rust
+│   ├── src/lib.rs             # C-FFI memory engine untuk Volume Profile
+│   └── Cargo.toml             # Konfigurasi dependensi Rust
 ├── src/
 │   ├── market_stream.py       # Engine WebSocket Binance (OFI, Candle Live)
 │   ├── strategy.py            # Engine teknikal (SMC/FVG, Scoring System)
 │   ├── live_trader.py         # Eksekusi limit order & manajemen SL/TP
 │   ├── ai_analyzer.py         # Penghubung DeepSeek Validator
 │   ├── notifier.py            # Poller & Pengirim notifikasi Telegram
-│   ├── sentiment.py           # Ekstraktor data Funding Rate & OI
-│   ├── calendar.py            # Sistem penarik Kalender Ekonomi Makro
-│   └── backtester/            # Modul simulasi masa lalu
+│   ├── order_flow_engine.py   # Jembatan komunikasi C-FFI Python ke Rust
+│   └── backtester/            # Modul mesin simulasi
+├── docs/                      # Laporan PDF dan Markdown (Audit & Analisis)
+├── tools/                     # Skrip alat bantu (cancel_orders, check_balance)
+├── tests/                     # Skrip pengujian komponen
+├── research/                  # Skrip riset kuantitatif dan penggalian data
 ├── Dockerfile                 # Image konfigurasi terisolasi (Non-Root User)
 ├── docker-compose.yml         # Manajemen orkestrasi & Resource Limit
 └── requirements.txt           # Dependensi pustaka Python

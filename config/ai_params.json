@@ -1,0 +1,6 @@
+{
+    "cvd_divergence_threshold": 2.0,
+    "imbalance_threshold": 0.25,
+    "vwap_distance_pct": 0.07,
+    "reasoning": "CVD nilai 0.65 menunjukkan volatilitas rendah, sehingga ambang deviasi dapat disetel lebih ketat (\u22482). Imbalance orderbook rata\u2011rata ~29% menandakan tekanan beli yang kuat; menetapkan threshold sedikit di bawah nilai rata\u2011rata (25%) akan menandai pergerakan signifikan tanpa terlalu banyak noise. Jarak VWAP dipilih 7% karena volatilitas harga tidak ekstrem, cukup sensitif untuk mendeteksi over\u2011extension namun masih memberi ruang bagi pergerakan mikro."
+}

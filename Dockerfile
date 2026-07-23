@@ -8,10 +8,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Buat user non-root untuk keamanan
 RUN groupadd -r botuser && useradd -r -g botuser botuser
 
-# Install procps untuk pgrep di Healthcheck
-RUN apt-get update && apt-get install -y procps && rm -rf /var/lib/apt/lists/*
+# Install procps (healthcheck), curl, and build-essential for Rust compilation
+RUN apt-get update && apt-get install -y procps curl build-essential && rm -rf /var/lib/apt/lists/*
+
+# Install Rust toolchain
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 COPY . .
+
+# Compile Rust engine into a shared library (.so for Linux)
+RUN cd rust_engine && cargo build --release
 
 # Ganti ke user non-root
 RUN chown -R botuser:botuser /app
