@@ -83,7 +83,7 @@ class TelegramNotifier:
                                 elif text == "/ping":
                                     await self._send_to_chat(chat_id, "🏓 <b>PONG!</b> Bot Scalp BTC sedang online.")
                                 elif text == "/market":
-                                    metrics = engine.get_metrics(lookback_seconds=14400)
+                                    metrics = engine.get_metrics()
                                     price = metrics.get('current_price', metrics.get('vwap', 0))
                                     
                                     msg_market = (

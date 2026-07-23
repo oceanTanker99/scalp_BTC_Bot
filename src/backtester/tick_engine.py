@@ -69,7 +69,7 @@ class TickBacktester:
                         # Evaluate Strategy every 3 seconds (simulated)
                         if not self.position and ts_sec - self.last_eval_time >= 3:
                             self.last_eval_time = ts_sec
-                            metrics = self.engine.get_metrics(lookback_seconds=14400)
+                            metrics = self.engine.get_metrics()
                             
                             # Mock imbalance because we lack depth data
                             # We force it to follow CVD direction so it bypasses the strategy check
