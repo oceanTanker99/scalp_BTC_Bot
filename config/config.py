@@ -6,7 +6,7 @@ load_dotenv()
 # API Keys
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY", "")
 BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY", "")
-AI_API_KEY = os.getenv("AI_API_KEY", "")
+AI_API_KEY = os.getenv("AI_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or os.getenv("9ROUTER_API_KEY", "")
 BINANCE_TESTNET = os.getenv("BINANCE_TESTNET", "true").lower() == "true"
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_IDS = [x.strip() for x in os.getenv("TELEGRAM_CHAT_ID", "").split(",") if x.strip()]
