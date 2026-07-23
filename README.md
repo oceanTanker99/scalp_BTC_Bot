@@ -132,4 +132,10 @@ scalp_BTC_Bot/
 
 ---
 
+## 📚 Dokumentasi Lanjutan (Deep Dive)
+Bagi para *Quant Developer* atau kontributor teknis yang ingin memahami lebih dalam tentang bagaimana bot ini menangani isu memori C-FFI, algoritma perburuan celah *Volume Profile*, dan arsitektur *High-Frequency Trading*, silakan baca selengkapnya di:
+👉 **[Architecture & Technology Deep Dive](docs/Architecture_and_Technology.md)**
+
+---
+
 *Penafian (Disclaimer): Algoritma trading ini melibatkan risiko finansial yang ekstrim. Tidak ada garansi atas kerugian Anda. Pengembang tidak bertanggung jawab atas likuidasi saldo.*
