@@ -25,3 +25,7 @@ Thumbs.db
 
 # Scratch & Debug files
 deepseek_answer.txt
+
+# Rust build artifacts
+rust_engine/target/
+*.rs.bk

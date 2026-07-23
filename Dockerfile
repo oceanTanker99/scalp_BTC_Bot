@@ -1,3 +1,10 @@
+# ====== Stage 1: Rust Builder ======
+FROM rust:1.80-slim AS rust-builder
+WORKDIR /build
+COPY rust_engine/ ./rust_engine/
+RUN cd rust_engine && cargo build --release
+
+# ====== Stage 2: Python Runtime ======
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -8,17 +15,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Buat user non-root untuk keamanan
 RUN groupadd -r botuser && useradd -r -g botuser botuser
 
-# Install procps (healthcheck), curl, and build-essential for Rust compilation
-RUN apt-get update && apt-get install -y procps curl build-essential && rm -rf /var/lib/apt/lists/*
+# Install procps untuk healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends procps && rm -rf /var/lib/apt/lists/*
 
-# Install Rust toolchain
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
+# Copy compiled Rust library from builder stage
+COPY --from=rust-builder /build/rust_engine/target/release/librust_engine.so /app/rust_engine/target/release/
 
-COPY . .
-
-# Compile Rust engine into a shared library (.so for Linux)
-RUN cd rust_engine && cargo build --release
+# Copy Python source code
+COPY main.py run_backtest.py run_parallel.py ./
+COPY config/ ./config/
+COPY src/ ./src/
 
 # Ganti ke user non-root
 RUN chown -R botuser:botuser /app

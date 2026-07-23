@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import logging.handlers
 import sys
 import os
 from datetime import datetime, timezone
@@ -24,7 +25,9 @@ if sys.platform == 'win32':
 os.makedirs("logs", exist_ok=True)
 handlers = [logging.StreamHandler(sys.stdout)]
 try:
-    handlers.append(logging.FileHandler("logs/bot.log", encoding="utf-8"))
+    handlers.append(logging.handlers.RotatingFileHandler(
+        "logs/bot.log", encoding="utf-8", maxBytes=10*1024*1024, backupCount=5
+    ))
 except PermissionError:
     pass
 
@@ -75,12 +78,23 @@ class ScalpBot:
         # Mulai tasks background
         self._polling_task = asyncio.create_task(self.notifier.start_polling(self.trader, self.stream.engine, self.strategy))
         self._ai_tuning_task = asyncio.create_task(self.ai_tuner.start_tuning_loop())
+        self._reconciliation_task = asyncio.create_task(self._reconciliation_loop())
         
         await self.stream.start()
 
         # Keep alive
         while True:
             await asyncio.sleep(3600)
+
+    async def _reconciliation_loop(self):
+        """[C-1 FIX] Periodically check for naked positions without SL/TP."""
+        log.info("🛡️ Background Reconciliation task aktif (cek setiap 10 detik)...")
+        while True:
+            await asyncio.sleep(10)
+            try:
+                await self.trader.reconcile_protection()
+            except Exception as e:
+                log.error(f"Error di reconciliation loop: {e}")
 
     async def on_metrics_update(self, metrics):
         # Callback ini dipanggil setiap beberapa detik oleh MarketStream

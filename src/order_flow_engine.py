@@ -82,9 +82,10 @@ class OrderFlowEngine:
         except Exception as e:
             log.error(f"Error processing depth: {e}")
 
-    def get_metrics(self, lookback_seconds=14400):
+    def get_metrics(self):
         """
         Mengekstrak metrik Volume Profile & VWAP dari Rust memory dalam mikrodetik.
+        Rust engine secara native mengelola lookback 4 jam (14400 detik).
         """
         metrics = {
             "cvd": 0.0,

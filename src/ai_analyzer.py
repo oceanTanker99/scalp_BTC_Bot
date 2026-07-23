@@ -73,8 +73,6 @@ Data 4 Jam Terakhir:
 - CVD (Delta Volume): {metrics_4h.get('cvd', 0)}
 - VWAP: {metrics_4h.get('vwap', 0)}
 - Orderbook Imbalance Rata-Rata: {metrics_4h.get('imbalance', 0)}
-- Total CVD (Delta): {metrics_4h.get('cvd', 0)}
-- Orderbook Imbalance Rata-Rata: {metrics_4h.get('imbalance', 0)}
 
 Volume Profile (4 Jam):
 - Harga Saat Ini: {metrics_4h.get('current_price', 0)}

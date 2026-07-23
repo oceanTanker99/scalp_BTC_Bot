@@ -219,6 +219,15 @@ impl EngineState {
             self.cached_vah = vah;
             self.cached_vaw = if poc > 0.0 { ((vah - val) / poc) * 100.0 } else { 0.0 };
             self.cached_chop = self.get_chop();
+            
+            // Shrink global indices to prevent unbounded O(N) growth
+            while self.global_min_idx < self.global_max_idx && self.histogram[self.global_min_idx] == 0.0 {
+                self.global_min_idx += 1;
+            }
+            while self.global_max_idx > self.global_min_idx && self.histogram[self.global_max_idx] == 0.0 {
+                self.global_max_idx -= 1;
+            }
+            
             self.last_htf_ts = current_ts;
         }
     }

@@ -17,12 +17,15 @@ class StrategyEngine:
         self.last_load_time = 0
 
     def _load_params(self):
-        # Only reload every few seconds if needed, or rely on file modified time
+        # Only reload if file has actually been modified since last read
         try:
             if os.path.exists(self.params_file):
-                with open(self.params_file, "r") as f:
-                    params = json.load(f)
-                    self.current_params.update(params)
+                mtime = os.path.getmtime(self.params_file)
+                if mtime > self.last_load_time:
+                    with open(self.params_file, "r") as f:
+                        params = json.load(f)
+                        self.current_params.update(params)
+                    self.last_load_time = mtime
         except Exception as e:
             log.error(f"Error loading AI params: {e}")
 

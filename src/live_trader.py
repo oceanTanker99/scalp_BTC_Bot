@@ -3,7 +3,8 @@ import asyncio
 import time
 import os
 import csv
-from datetime import datetime
+import json
+from datetime import datetime, timezone
 from binance import AsyncClient
 from binance.exceptions import BinanceAPIException
 from config.config import (
@@ -32,6 +33,38 @@ class LiveTrader:
         self._notifier = None  # Diisi oleh main.py
         self.is_killed = False  # Flag kill switch — aktif = berhenti trading hari ini
         self._last_logged_trade_id = None
+        self._state_file = "data/kill_switch_state.json"
+        self._load_persistent_state()
+
+    # --- Persistent Kill Switch State ---
+    def _load_persistent_state(self):
+        """Load kill switch state from disk to survive restarts."""
+        try:
+            if os.path.exists(self._state_file):
+                with open(self._state_file, "r") as f:
+                    state = json.load(f)
+                saved_date = state.get("date", "")
+                today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                if saved_date == today:
+                    self.start_balance = state.get("start_balance", 0.0)
+                    self.is_killed = state.get("is_killed", False)
+                    log.info(f"♻️ State dipulihkan: start_balance={self.start_balance}, killed={self.is_killed}")
+        except Exception as e:
+            log.error(f"Gagal memuat state kill switch: {e}")
+
+    def _save_persistent_state(self):
+        """Save kill switch state to disk."""
+        try:
+            os.makedirs("data", exist_ok=True)
+            state = {
+                "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                "start_balance": self.start_balance,
+                "is_killed": self.is_killed
+            }
+            with open(self._state_file, "w") as f:
+                json.dump(state, f)
+        except Exception as e:
+            log.error(f"Gagal menyimpan state kill switch: {e}")
 
     async def sync_time(self):
         # Sync time with Binance Server to prevent Timestamp APIError (-1021)
@@ -55,7 +88,9 @@ class LiveTrader:
         await self.sync_time()
 
         await self._set_leverage()
-        self.start_balance = await self.get_balance()
+        if self.start_balance <= 0:
+            self.start_balance = await self.get_balance()
+        self._save_persistent_state()
         log.info(f"Live Trader diinisialisasi. Saldo awal: {self.start_balance} USDT")
 
     async def _set_leverage(self):
@@ -165,6 +200,7 @@ class LiveTrader:
 
         if drawdown >= MAX_DAILY_DRAWDOWN_PCT:
             self.is_killed = True
+            self._save_persistent_state()
             log.error(
                 f"🚨 KILL SWITCH AKTIF! Drawdown {drawdown:.2%} melebihi batas {MAX_DAILY_DRAWDOWN_PCT:.0%}. "
                 f"Bot berhenti trading hari ini."
@@ -203,7 +239,8 @@ class LiveTrader:
         qty = risk_amount / (current_price * sl_pct)
         qty = round(qty, 3)
         if qty < 0.001:
-            qty = 0.001
+            log.warning(f"⚠️ Qty terlalu kecil ({qty:.6f} BTC < 0.001 minimum). Trade dibatalkan demi menjaga risk management.")
+            return None, None, None
 
         side = 'BUY' if signal == 'LONG' else 'SELL'
         sl_side = 'SELL' if signal == 'LONG' else 'BUY'
@@ -216,12 +253,12 @@ class LiveTrader:
             sl_price = round(current_price * (1 + sl_pct), 1)
             tp_price = round(current_price * (1 - (sl_pct * RRR_TP1)), 1)
 
-        try:
-            # --- Chasing Limit Order ---
-            filled = False
-            final_order = None
+        # --- Chasing Limit Order ---
+        filled = False
+        final_order = None
 
-            for attempt in range(1, CHASE_MAX_ATTEMPTS + 1):
+        for attempt in range(1, CHASE_MAX_ATTEMPTS + 1):
+            try:
                 # Ambil Best Bid/Ask terbaru agar Post-Only (GTX) pasti diterima
                 ob_ticker = await self.client.futures_orderbook_ticker(symbol=SYMBOL)
                 if signal == 'LONG':
@@ -265,11 +302,20 @@ class LiveTrader:
                     except BinanceAPIException:
                         pass  # Order mungkin sudah expired/canceled
 
-            if not filled:
-                log.warning(f"❌ Gagal mengisi order setelah {CHASE_MAX_ATTEMPTS} percobaan. Trade dibatalkan.")
+            except BinanceAPIException as e:
+                log.warning(f"⚠️ Binance API Error di percobaan {attempt}: {e}. Mencoba ulang...")
+                await asyncio.sleep(1)
+                continue
+            except Exception as e:
+                log.error(f"Error saat eksekusi trade di percobaan {attempt}: {e}")
                 return None, None, None
 
-            # --- Pasang SL & TP setelah entry terisi ---
+        if not filled:
+            log.warning(f"❌ Gagal mengisi order setelah {CHASE_MAX_ATTEMPTS} percobaan. Trade dibatalkan.")
+            return None, None, None
+
+        # --- Pasang SL & TP setelah entry terisi ---
+        try:
             actual_entry = float(final_order.get('avgPrice', limit_price))
 
             # Rekalkulasi SL/TP berdasarkan harga entry aktual (bukan estimasi awal)
@@ -307,11 +353,9 @@ class LiveTrader:
             )
             return sl_price, tp_price, qty
 
-        except BinanceAPIException as e:
-            log.error(f"Binance API Error saat eksekusi trade: {e}")
-            return None, None, None
         except Exception as e:
-            log.error(f"Error saat eksekusi trade: {e}")
+            log.error(f"🚨 KRITIS: Entry terisi tapi SL/TP gagal dipasang: {e}. Menjalankan reconciliation...")
+            await self.reconcile_protection()
             return None, None, None
 
     async def manage_trailing_stop(self):
@@ -403,6 +447,67 @@ class LiveTrader:
                                     )
         except Exception as e:
             log.error(f"Error di manage_trailing_stop: {e}")
+
+    async def reconcile_protection(self):
+        """
+        [C-1 FIX] Background Safety Net: Jika ada posisi terbuka tanpa SL/TP,
+        otomatis pasang proteksi darurat berdasarkan entry price.
+        """
+        try:
+            positions = await self.client.futures_position_information(symbol=SYMBOL)
+            active = [p for p in positions if float(p.get('positionAmt', 0)) != 0]
+            if not active:
+                return
+
+            pos = active[0]
+            entry_price = float(pos['entryPrice'])
+            qty = float(pos['positionAmt'])
+            direction = "LONG" if qty > 0 else "SHORT"
+            sl_side = "SELL" if direction == "LONG" else "BUY"
+
+            # Cek apakah sudah ada SL/TP
+            orders = await self.client.futures_get_open_orders(symbol=SYMBOL)
+            has_sl = any(o['type'] == 'STOP_MARKET' for o in orders)
+            has_tp = any(o['type'] == 'TAKE_PROFIT_MARKET' for o in orders)
+
+            if has_sl and has_tp:
+                return  # Proteksi sudah lengkap
+
+            # Pasang proteksi darurat dengan SL 0.5% dan TP 1.0% dari entry
+            emergency_sl_pct = 0.005
+            emergency_tp_pct = 0.01
+
+            if not has_sl:
+                if direction == "LONG":
+                    sl_price = round(entry_price * (1 - emergency_sl_pct), 1)
+                else:
+                    sl_price = round(entry_price * (1 + emergency_sl_pct), 1)
+
+                await self.client.futures_create_order(
+                    symbol=SYMBOL, side=sl_side, type='STOP_MARKET',
+                    stopPrice=sl_price, closePosition=True, timeInForce='GTE_GTC'
+                )
+                log.warning(f"🚨 RECONCILIATION: SL darurat dipasang @ {sl_price}")
+                if self._notifier:
+                    await self._notifier.notify_error(
+                        f"🚨 RECONCILIATION: Posisi {direction} terdeteksi TANPA Stop Loss!\n"
+                        f"SL darurat dipasang otomatis @ {sl_price:,.1f}"
+                    )
+
+            if not has_tp:
+                if direction == "LONG":
+                    tp_price = round(entry_price * (1 + emergency_tp_pct), 1)
+                else:
+                    tp_price = round(entry_price * (1 - emergency_tp_pct), 1)
+
+                await self.client.futures_create_order(
+                    symbol=SYMBOL, side=sl_side, type='TAKE_PROFIT_MARKET',
+                    stopPrice=tp_price, closePosition=True, timeInForce='GTE_GTC'
+                )
+                log.warning(f"🚨 RECONCILIATION: TP darurat dipasang @ {tp_price}")
+
+        except Exception as e:
+            log.error(f"Error di reconcile_protection: {e}")
 
     async def log_closed_trade(self):
         """

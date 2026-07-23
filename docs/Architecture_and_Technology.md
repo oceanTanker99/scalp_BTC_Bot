@@ -1,65 +1,32 @@
-# Scalp BTC Bot: Architecture & Technology Deep Dive
+# Architecture & Technology Deep Dive
 
-Dokumen ini membedah arsitektur kuantitatif *High-Frequency Trading* (HFT) yang menggerakkan Scalp BTC Bot. Bot ini bukan sekadar skrip Python biasa, melainkan penggabungan performa tingkat rendah (*low-level*) dari bahasa pemrograman **Rust** dan fleksibilitas *machine learning* dari **Python (DeepSeek AI)**.
+## 1. Dual-Engine Architecture
+Scalp BTC Bot menggunakan arsitektur *Dual-Engine* yang memisahkan logika kalkulasi intensif (HFT) dengan lapisan orkestrasi dan integrasi API AI.
 
-## 1. Dual-Layer Architecture (Pembagian Otak)
+### a. Execution Layer (Rust Engine via C-FFI)
+Untuk memastikan tidak ada latensi pada level *tick* WebSocket Binance, semua pengolahan *Order Flow* (seperti Volume Profile, Value Area, VWAP, dan CVD) didelegasikan ke mesin eksekusi yang ditulis dalam Rust (`rust_engine`). 
+- **Kompleksitas O(1):** Penggunaan memori blok statis dan ring buffer (`VecDeque`) menjamin penambahan dan penghapusan data *tick* dalam waktu konstan.
+- **Histogram Dinamis:** Alih-alih melakukan scanning O(N) ke seluruh array harga, *engine* menggunakan rentang batas atas/bawah (`global_max_idx` & `global_min_idx`) yang dipersempit secara cerdas saat harga berubah untuk menjaga kecepatan kalkulasi Value Area (VAH/VAL/POC).
+- **C-FFI Bridge:** Pustaka Rust dikompilasi menjadi *shared object* (`.so` / `.dll`) dan diakses langsung oleh Python melalui modul `ctypes`. Ini menembus keterbatasan *Global Interpreter Lock* (GIL) Python, sehingga proses kalkulasi dapat memanfaatkan kinerja multi-threading CPU.
 
-Di dunia *trading* kripto *futures*, latensi adalah musuh utama. Menjalankan indikator, merespons *tick* harga, sekaligus menunggu respons API dari AI di dalam satu putaran waktu (*thread*) yang sama akan menyebabkan bot ketinggalan momen berharga (*slippage*).
+### b. Tuning & Execution Layer (Python)
+Lapis Python bertugas mengelola siklus hidup bot:
+- **Asynchronous I/O:** Memanfaatkan `asyncio` dan `aiohttp` untuk mengelola stream WebSocket dari Binance dan pemanggilan API HTTP (ke Telegram dan DeepSeek) secara *non-blocking*.
+- **Task Terpisah:** Orkestrasi dilakukan melalui *background tasks* (seperti `start_polling` untuk Telegram, `start_tuning_loop` untuk kalibrasi AI, dan `reconciliation_loop` untuk pengecekan keamanan order).
 
-Oleh karena itu, bot ini dipecah menjadi dua sistem yang beroperasi secara independen:
+## 2. Artificial Intelligence Integration
+Bot ini terintegrasi dengan **DeepSeek V4 Pro** (atau LLM lain yang kompatibel) sebagai *AI Validator* lapis kedua.
+- **Berkala, Bukan Real-time:** Untuk menghindari latensi LLM (yang memakan waktu 2-5 detik per *request*), AI **tidak** dipanggil pada setiap *tick* atau pada saat sinyal muncul. Alih-alih, AI Tuning Task berjalan di *background* secara berkala untuk membaca data sentimen dan memberikan bobot *threshold* baru kepada strategi *execution layer*.
+- **Kemandirian Execution Layer:** Jika API AI gagal, lambat, atau kehabisan kredit, Execution Layer (Python + Rust) tetap beroperasi penuh menggunakan parameter cache sebelumnya (yang sekarang dioptimalkan menggunakan fungsi sinkronisasi *mtime*).
 
-### A. Execution Layer (Rust Engine)
-- **Tugas**: Berjalan secara *synchronous* secepat kilat untuk menyedot jutaan *tick* data dari Binance WebSockets.
-- **Karakteristik**: Lapisan ini murni kuantitatif. Sama sekali tidak ada panggilan internet ke OpenAI/DeepSeek di sini. Semuanya berfokus pada matematika murni (VWAP, CVD, Volume Profile) dan mendeteksi kondisi *Mean-Reversion*.
-- **Bahasa**: Ditulis di dalam `lib.rs` (Rust) dan dikompilasi menjadi *Dynamic Library* (.dll/.so).
+## 3. Sistem Proteksi & Keamanan (Audit Verified)
+Bot dilengkapi berbagai instrumen keamanan (berdasarkan rekomendasi *Comprehensive Audit*):
+- **Naked Position Safety Net (Reconciliation):** Task latar belakang berjalan setiap 10 detik memastikan bahwa jika posisi berstatus *OPEN* tetapi Stop Loss (SL) atau Take Profit (TP) gagal terpasang karena kegagalan jaringan (API Error -1021), bot akan langsung melikuidasi paksa (*Market Close*) posisi tersebut.
+- **Persistent Kill Switch:** Jika *Drawdown* harian menembus batas maksimal (20%), bot mematikan dirinya sendiri (Kill Switch). Status ini disimpan di dalam file `.json` persisten, sehingga me-restart Docker tidak akan mereset perlindungan keamanan hingga hari berganti (00:00 UTC).
+- **Hardened Docker Infrastructure:**
+  - *Multi-stage Build:* Mesin Rust dikompilasi dalam kontainer *builder* terpisah, meminimalisasi ukuran *image* akhir secara signifikan.
+  - *Non-Root User:* *Runtime* Python berjalan menggunakan *user* `botuser` tanpa akses *root*, menetralkan risiko eksploitasi dan memberikan perlindungan sistem tingkat OS.
+- **Dependency Pinning:** Semua dependensi (`aiohttp`, `python-binance`, dll) dikunci versinya di `requirements.txt` agar pembaruan tidak merusak eksekusi (*breaking changes*).
 
-### B. Tuning Layer (Python + DeepSeek V4)
-- **Tugas**: Berjalan di *background* secara asinkron atau periodik (berbasis interval). Lapisan ini bertugas menyerap data sentimen (*Funding Rate*, *Open Interest*) dan mengirimkannya ke AI DeepSeek.
-- **Output**: Menghasilkan parameter JSON seperti penyesuaian bobot ambang batas (*threshold*) yang kemudian "disuntikkan" kembali ke *Execution Layer*.
-
----
-
-## 2. Zero-Copy Latency via C-FFI (Python ↔ Rust)
-
-Bagaimana Python bisa berkomunikasi dengan Rust tanpa lag?
-Jika kita menggunakan JSON atau API REST lokal antara Python dan Rust, proses serialisasi-deserialisasi akan memakan waktu milidetik yang berharga. 
-
-Kita menggunakan **C-FFI (Foreign Function Interface)**.
-Dalam metode ini, Python menggunakan modul `ctypes` untuk **berbagi alamat memori yang sama persis** dengan Rust. 
-Python mengalokasikan *array* 1 Dimensi tipe Double (`ctypes.c_double * N`), dan memberikan alamat kursor (*pointer*) tersebut ke Rust. 
-
-Rust kemudian membakar hasil kalkulasi VWAP, CVD, dan Volume Profile langsung ke alamat memori fisik tersebut. Karena memori tersebut adalah milik Python sedari awal, Python tidak perlu melakukan sinkronisasi atau menyalin ulang *array* tersebut. Waktu pembacaan indikator murni **O(1)**.
-
-> [!WARNING]
-> **C-FFI Memory Synchronization Safety:** Kesalahan satu digit saja dalam mengalokasikan besaran *array* di Python dan apa yang diekspektasikan oleh Rust akan memicu **Buffer Overflow (Segfault)** yang membunuh proses secara instan tanpa pesan *error* apa pun.
-
----
-
-## 3. Algoritma "The Gap Abyss" pada Volume Profile
-
-Salah satu tantangan terbesar HFT di aset kripto adalah **ketiadaan pergerakan yang mulus**. Harga BTCUSDT tidak bergerak dari 60,000 ke 60,001 lalu ke 60,002. Harga bisa langsung melompat dari 60,000 ke 60,015 dalam satu *tick*, meninggalkan "celah harga" (*price gap*) dengan volume transaksi absolut `0.0`.
-
-Pada algoritma standar perhitungan *Value Area High* (VAH) dan *Value Area Low* (VAL) di Volume Profile, algoritma akan membandingkan volume di atas POC (*Point of Control*) dan di bawah POC.
-- *Jika Volume Atas > Volume Bawah, masukkan Atas ke rentang.*
-- *Jika Volume Bawah > Volume Atas, masukkan Bawah ke rentang.*
-
-**Bencana The Gap Abyss:**
-Jika sisi atas dan sisi bawah sama-sama kosong (`0.0`), algoritma yang bodoh akan terjebak, memilih salah satu arah ke dalam kehampaan hingga indeksnya mencapai angka `0` (menyebabkan indikator VAL terjun payung ke harga yang tidak masuk akal).
-
-**Solusi Algoritmik di Rust:**
-Mesin Rust ini dirancang mendeteksi celah kosong. Jika indeks `up_vol` dan `down_vol` sama dengan `0.0`, mesin akan memicu protokol jembatan (*bridging*) dengan merentangkan indeks secara simetris ke atas dan ke bawah sekaligus hingga ia "menemukan" bongkahan volume di kedua sisi tebing. Ini menjaga integritas kurva distribusi normal.
-
----
-
-## 4. Sinkronisasi Waktu Ekstrem (Manajemen RecvWindow)
-
-Kesalahan klasik bot *trading* adalah terkena **APIError -1021 (Timestamp for this request is outside of the recvWindow)**. Hal ini terjadi karena latensi jaringan (*ping*) antara server *cloud* Anda dan server Binance.
-
-Bot ini tidak menggunakan waktu sistem lokal (jam OS) secara mentah. Bot ini melakukan penyesuaian (*offset*):
-```python
-offset = server_time - local_time - 1000  # Buffer agresif
-```
-Pengurangan `1000` milidetik (1 detik) tambahan memastikan bahwa *request payload* dari bot kita dikirim "seolah-olah" berasal dari masa lalu yang aman, sehingga selalu mendarat tepat dalam jendela penerimaan (*recvWindow*) 5000ms milik Binance, tidak peduli seberapa padatnya lalu lintas internet saat itu.
-
----
-*Dokumentasi ini adalah gambaran fundamental. Kode implementasi teknis dapat dilihat di direktori `rust_engine/` dan skrip `order_flow_engine.py`.*
+## 4. Mekanisme Order & Sinkronisasi
+Bot menggunakan eksekusi `LIMIT` untuk order reguler dengan mekanisme *retry loop* (*GTX/Post Only*). Jika harga bergeser terlalu cepat, loop *retry* dengan manajemen eksepsi yang aman akan mencoba menyesuaikan harga order kembali. Bot secara otomatis menolak order yang kuantitasnya kurang dari spesifikasi minimal kuantitas dari Binance (*Notional/Min Qty*) untuk mencegah error eksekusi yang tak terduga.

@@ -69,11 +69,13 @@ class MarketStream:
         log.info(f"Memulai loop evaluasi strategi setiap {EVALUATION_INTERVAL} detik...")
         while self._running:
             await asyncio.sleep(EVALUATION_INTERVAL)
-            # Fetch 15-minute, 1-hour, and 4-hour CVD/VWAP metrics
+            # Rust engine selalu menggunakan lookback 4-jam (14400s) untuk semua metrik.
+            # Semua timeframe menggunakan profil volume yang sama.
+            of_metrics = self.engine.get_metrics()
             metrics = {
-                "15m": self.engine.get_metrics(lookback_seconds=900),
-                "1h": self.engine.get_metrics(lookback_seconds=3600),
-                "4h": self.engine.get_metrics(lookback_seconds=14400)
+                "15m": of_metrics,
+                "1h": of_metrics,
+                "4h": of_metrics
             }
             if metrics["15m"]["current_price"] > 0:
                 await self._trigger_callbacks(metrics)

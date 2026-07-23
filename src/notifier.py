@@ -33,6 +33,8 @@ class TelegramNotifier:
                         log.error(f"Gagal mengirim pesan Telegram ke {chat_id}: {resp.status}")
         except Exception as e:
             log.error(f"Error Telegram: {e}")
+            if self._session and not self._session.closed:
+                await self._session.close()
             self._session = None  # Reset session jika error
 
     async def _send_to_chat(self, chat_id: str, message: str):
@@ -112,6 +114,8 @@ class TelegramNotifier:
                 pass
             except Exception as e:
                 log.error(f"Error Telegram Polling: {e}")
+                if self._session and not self._session.closed:
+                    await self._session.close()
                 self._session = None  # Reset session jika error polling
                 await asyncio.sleep(5)
 

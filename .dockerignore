@@ -25,3 +25,5 @@ data/
 # IDE
 .vscode/
 .idea/
+
+rust_engine/target/
