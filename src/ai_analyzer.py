@@ -37,7 +37,7 @@ class AITuner:
             # Use host.docker.internal to reach the Windows host from inside Docker
             self.client = AsyncOpenAI(
                 api_key=self.api_key,
-                base_url=os.getenv("AI_BASE_URL", "https://api.9router.com/v1"),
+                base_url=os.getenv("AI_BASE_URL", "http://host.docker.internal:20128/v1"),
                 timeout=AI_REQUEST_TIMEOUT
             )
 
