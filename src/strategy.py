@@ -7,6 +7,7 @@ log = logging.getLogger(__name__)
 class StrategyEngine:
     def __init__(self):
         self.params_file = "config/ai_params.json"
+        self.kronos_cache_file = "config/kronos_cache.json"
         
         # In-memory cache of params to avoid excessive disk I/O
         self.current_params = {
@@ -15,6 +16,10 @@ class StrategyEngine:
             "vwap_distance_pct": 0.1
         }
         self.last_load_time = 0
+        
+        # In-memory cache for Kronos
+        self.kronos_prediction = {"trend": "SIDEWAYS"}
+        self.last_kronos_load_time = 0
 
     def _load_params(self):
         # Only reload if file has actually been modified since last read
@@ -26,8 +31,17 @@ class StrategyEngine:
                         params = json.load(f)
                         self.current_params.update(params)
                     self.last_load_time = mtime
+            
+            # Load Kronos cache
+            if os.path.exists(self.kronos_cache_file):
+                k_mtime = os.path.getmtime(self.kronos_cache_file)
+                if k_mtime > self.last_kronos_load_time:
+                    with open(self.kronos_cache_file, "r") as f:
+                        k_data = json.load(f)
+                        self.kronos_prediction = k_data
+                    self.last_kronos_load_time = k_mtime
         except Exception as e:
-            log.error(f"Error loading AI params: {e}")
+            log.error(f"Error loading AI/Kronos params: {e}")
 
     def analyze_order_flow(self, metrics: dict):
         """
@@ -58,6 +72,21 @@ class StrategyEngine:
         imb_thresh = self.current_params.get("imbalance_threshold", 0.3)
         vwap_pct = self.current_params.get("vwap_distance_pct", 0.1)
         
+        kronos_trend = self.kronos_prediction.get("trend", "SIDEWAYS")
+        
+        # Apply Soft Filter
+        # Jika Kronos prediksi berlawanan arah dengan strategi, perketat syarat masuk 2x lipat
+        long_penalty = 2.0 if kronos_trend == "DOWN" else 1.0
+        short_penalty = 2.0 if kronos_trend == "UP" else 1.0
+        
+        cvd_thresh_long = cvd_thresh * long_penalty
+        imb_thresh_long = imb_thresh * long_penalty
+        vwap_pct_long = vwap_pct * long_penalty
+        
+        cvd_thresh_short = cvd_thresh * short_penalty
+        imb_thresh_short = imb_thresh * short_penalty
+        vwap_pct_short = vwap_pct * short_penalty
+        
         dist_to_vwap = (current_price - vwap) / vwap * 100
         
         # Volume Profile Golden Setup Checks (0.2% tolerance)
@@ -69,8 +98,8 @@ class StrategyEngine:
         # 2. Harga di dekat atau di bawah Value Area Low (Undervalued)
         # 3. CVD Positif (Taker Buy dominan)
         # 4. Orderbook Imbalance Positif (Bids > Asks)
-        if dist_to_vwap < -vwap_pct and cvd > cvd_thresh and imbalance > imb_thresh and is_undervalued:
-            log.info(f"[ORDER FLOW] LONG SIGNAL DETECTED | Price: {current_price} | VAL: {val:.1f} | CVD: {cvd:.1f} | Imbalance: {imbalance:.2f}")
+        if dist_to_vwap < -vwap_pct_long and cvd > cvd_thresh_long and imbalance > imb_thresh_long and is_undervalued:
+            log.info(f"[ORDER FLOW] LONG SIGNAL DETECTED | Price: {current_price} | VAL: {val:.1f} | CVD: {cvd:.1f} | Imb: {imbalance:.2f} | Kronos: {kronos_trend}")
             sl_distance = max(0.005, abs(dist_to_vwap / 100) / 2) # SL at half the VWAP distance
             return "LONG", current_price, sl_distance
             
@@ -79,8 +108,8 @@ class StrategyEngine:
         # 2. Harga di dekat atau di atas Value Area High (Overvalued)
         # 3. CVD Negatif (Taker Sell dominan)
         # 4. Orderbook Imbalance Negatif (Asks > Bids)
-        if dist_to_vwap > vwap_pct and cvd < -cvd_thresh and imbalance < -imb_thresh and is_overvalued:
-            log.info(f"[ORDER FLOW] SHORT SIGNAL DETECTED | Price: {current_price} | VAH: {vah:.1f} | CVD: {cvd:.1f} | Imbalance: {imbalance:.2f}")
+        if dist_to_vwap > vwap_pct_short and cvd < -cvd_thresh_short and imbalance < -imb_thresh_short and is_overvalued:
+            log.info(f"[ORDER FLOW] SHORT SIGNAL DETECTED | Price: {current_price} | VAH: {vah:.1f} | CVD: {cvd:.1f} | Imb: {imbalance:.2f} | Kronos: {kronos_trend}")
             sl_distance = max(0.005, abs(dist_to_vwap / 100) / 2)
             return "SHORT", current_price, sl_distance
             

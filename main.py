@@ -138,15 +138,8 @@ class ScalpBot:
                 valid_signal = False
                 log.info(f"🛡️ Sinyal {signal} diabaikan (NY Kill Zone: {dt_utc.hour:02d}:00 UTC).")
             
-            # Filter 2: VWAP Distance (> 0.45%)
-            if valid_signal and '15m' in metrics and 'vwap' in metrics['15m']:
-                vwap = metrics['15m']['vwap']
-                if vwap > 0:
-                    dist_to_vwap = abs(price - vwap) / vwap * 100
-                    if dist_to_vwap < 0.45:
-                        valid_signal = False
-                        log.info(f"🛡️ Sinyal {signal} diabaikan (Jarak VWAP {dist_to_vwap:.2f}% < 0.45%).")
-                        
+            # Filter 2: VWAP Distance (> 0.45%) - REMOVED
+            # Strategi sudah memiliki filter jarak VWAP dinamis (vwap_pct) dari AI tuning.
             if valid_signal:
                 log.info(f"⚡ [EKSEKUSI HFT] Sinyal {signal} @ {price:.1f} terdeteksi! Mengeksekusi...")
                 

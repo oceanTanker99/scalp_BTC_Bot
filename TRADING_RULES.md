@@ -5,10 +5,10 @@ Dokumen ini menjelaskan aturan, filter, dan manajemen risiko yang digunakan oleh
 ## 1. Filter Global
 Sebelum sinyal dievaluasi lebih lanjut, bot menerapkan filter berikut:
 - **NY Session Kill Zone**: Bot **tidak akan** melakukan open posisi (mengabaikan sinyal) antara pukul **13:00 hingga 15:59 UTC**.
-- **Jarak VWAP Minimum**: Sinyal akan diabaikan jika jarak harga saat ini ke VWAP (Volume Weighted Average Price) kurang dari **0.45%**. Ini untuk menghindari *choppy market* di sekitar nilai tengah.
+- **Jarak VWAP Dinamis**: Sinyal akan diabaikan jika jarak harga saat ini ke VWAP (Volume Weighted Average Price) kurang dari *threshold* AI. Jarak ini bisa dikalikan hingga 2x lipat jika melawan *trend* Kronos Foundation Model.
 
-## 2. Kondisi Entry (Order Flow)
-Evaluasi entry menggunakan parameter dinamis yang disesuaikan oleh AI Tuning (Background Process), dengan kombinasi kondisi berikut:
+## 2. Kondisi Entry (Order Flow & Kronos Soft Filter)
+Evaluasi entry menggunakan parameter dinamis yang disesuaikan oleh AI Tuning (Background Process), dengan kombinasi kondisi berikut. **Penting:** Jika arah sinyal berlawanan dengan arah prediksi makro **Kronos AI (Soft Filter)**, maka *threshold* `vwap_pct` dan `cvd_divergence_threshold` akan digandakan (2.0x) secara *real-time* untuk memperketat keamanan *entry*.
 
 ### Sinyal LONG
 Sinyal LONG akan terpicu jika semua kondisi berikut terpenuhi:

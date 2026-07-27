@@ -12,7 +12,8 @@ Bot trading algoritma otomatis yang beroperasi **24 Jam Nonstop** dan dirancang 
 
 Bot ini dibangun menggunakan **Dual-Layer Architecture** untuk menjamin kecepatan eksekusi tanpa mengorbankan kecerdasan buatan:
 - **Execution Layer (Rust Engine):** Seluruh kalkulasi tingkat *tick* seperti *Volume Profile*, *Value Area* (VAH/VAL/POC), VWAP, dan CVD (*Cumulative Volume Delta*) dijalankan di memori Rust (O(1) kompleksitas waktu) via C-FFI. Menjamin tidak ada antrean yang tersumbat meskipun pasar sangat *volatile*.
-- **Tuning Layer (Python + AI):** Lapisan atas menggunakan Python dan DeepSeek V4 Pro untuk membaca kondisi makro secara periodik tanpa memblokir jalur eksekusi utama.
+- **Tuning Layer (Python + LLM):** Lapisan atas menggunakan Python dan DeepSeek V4 Pro untuk membaca kondisi makro harian.
+- **Kronos Foundation Model (Real-time Macro Filter):** Berjalan secara *native* di *background* menggunakan GPU untuk memprediksi arah dan volatilitas *market* masa depan berdasarkan miliaran dataset K-Line global, yang kemudian digunakan sebagai *Soft Filter* pengetatan syarat masuk bagi algoritma HFT.
 
 Sistem skor 5 poin menggabungkan beberapa lapisan analisis:
 

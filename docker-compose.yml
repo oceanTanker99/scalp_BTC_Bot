@@ -8,6 +8,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+      - ./config:/app/config
     # Batas resource agar tidak memakan seluruh host
     deploy:
       resources:

@@ -29,3 +29,7 @@ deepseek_answer.txt
 # Rust build artifacts
 rust_engine/target/
 *.rs.bk
+
+# Kronos AI
+src/Kronos/
+config/kronos_cache.json
