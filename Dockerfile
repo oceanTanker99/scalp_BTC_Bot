@@ -13,7 +13,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Buat user non-root untuk keamanan
-RUN groupadd -r botuser && useradd -r -g botuser botuser
+RUN groupadd -r botuser && useradd -r -u 1001 -g botuser botuser
 
 # Install procps untuk healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends procps && rm -rf /var/lib/apt/lists/*
