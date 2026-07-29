@@ -124,13 +124,13 @@ fn main() {
             
             // Recompute HTF filters only once per minute (60,000 ms) to avoid O(N) histogram scans on every tick
             if ts > last_htf_ts + 60_000 {
-                cached_vaw = engine.get_vaw();
-                cached_chop = engine.get_chop();
+                cached_vaw = engine.tf_4h.get_vaw();
+                cached_chop = engine.tf_4h.get_chop();
                 last_htf_ts = ts;
             }
             
             if total_ticks % 1_000_000 == 0 {
-                println!("Ticks: {}M | Price: {} | VWAP: {:.1} | VAW: {:.2}% | CHOP: {:.1}", total_ticks / 1_000_000, price, if engine.vol_sum > 0.0 { engine.vol_price_sum / engine.vol_sum } else { 0.0 }, cached_vaw, cached_chop);
+                println!("Ticks: {}M | Price: {} | VWAP: {:.1} | VAW: {:.2}% | CHOP: {:.1}", total_ticks / 1_000_000, price, if engine.tf_4h.vol_sum > 0.0 { engine.tf_4h.vol_price_sum / engine.tf_4h.vol_sum } else { 0.0 }, cached_vaw, cached_chop);
             }
             
             // Check Exits for all strats
@@ -139,8 +139,8 @@ fn main() {
             }
             
             // Evaluate Entry if position == 0
-            if engine.vol_sum > 0.0 {
-                let vwap = engine.vol_price_sum / engine.vol_sum;
+            if engine.tf_4h.vol_sum > 0.0 {
+                let vwap = engine.tf_4h.vol_price_sum / engine.tf_4h.vol_sum;
                 let distance = (price - vwap).abs() / vwap;
                 
                 if distance > 0.0045 { // 0.45% VWAP Distance threshold

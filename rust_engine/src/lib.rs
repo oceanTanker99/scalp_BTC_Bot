@@ -1,34 +1,36 @@
 use std::collections::VecDeque;
 
-pub struct EngineState {
-    profile_ticks: VecDeque<(f64, f64, u64, f64)>, // price, qty, ts, abs_price_change
-    cvd_ticks: VecDeque<(f64, f64, u64, bool)>, // price, qty, ts, is_buyer_maker
-    histogram: Vec<f64>, // Price * 10 as index
-    profile_vol_sum: f64,
+pub struct TimeframeState {
+    pub profile_ticks: VecDeque<(f64, f64, u64, f64)>, // price, qty, ts, abs_price_change
+    pub cvd_ticks: VecDeque<(f64, f64, u64, bool)>,    // price, qty, ts, is_buyer_maker
+    pub histogram: Vec<f64>,                           // Price * 10 as index
+    pub profile_vol_sum: f64,
     pub cvd: f64,
     pub vol_price_sum: f64, // For VWAP
     pub vol_sum: f64,       // For VWAP
     
-    global_min_idx: usize,
-    global_max_idx: usize,
+    pub global_min_idx: usize,
+    pub global_max_idx: usize,
     
-    last_price: f64,
     pub cumulative_path: f64,
     
     // Caching HTF metrics to prevent O(N) blocking
-    cached_poc: f64,
-    cached_val: f64,
-    cached_vah: f64,
-    cached_vaw: f64,
-    cached_chop: f64,
-    last_htf_ts: u64,
+    pub cached_poc: f64,
+    pub cached_val: f64,
+    pub cached_vah: f64,
+    pub cached_vaw: f64,
+    pub cached_chop: f64,
+    pub last_htf_ts: u64,
+    
+    pub lookback_ms: u64,
 }
 
-impl EngineState {
-    pub fn new() -> Self {
+impl TimeframeState {
+    fn new(lookback_ms: u64) -> Self {
         Self {
-            profile_ticks: VecDeque::with_capacity(500_000),
-            cvd_ticks: VecDeque::with_capacity(500_000),
+            // Smaller capacity for smaller timeframes to save memory
+            profile_ticks: VecDeque::with_capacity(if lookback_ms < 3600_000 { 50_000 } else { 500_000 }),
+            cvd_ticks: VecDeque::with_capacity(if lookback_ms < 3600_000 { 50_000 } else { 500_000 }),
             histogram: vec![0.0; 2_000_000],
             profile_vol_sum: 0.0,
             cvd: 0.0,
@@ -38,7 +40,6 @@ impl EngineState {
             global_min_idx: 2_000_000,
             global_max_idx: 0,
             
-            last_price: 0.0,
             cumulative_path: 0.0,
             
             cached_poc: 0.0,
@@ -47,6 +48,8 @@ impl EngineState {
             cached_vaw: 0.0,
             cached_chop: 50.0,
             last_htf_ts: 0,
+            
+            lookback_ms,
         }
     }
 
@@ -58,12 +61,10 @@ impl EngineState {
         idx as f64 / 10.0
     }
 
-    pub fn add_tick(&mut self, price: f64, qty: f64, is_buyer_maker: bool, ts: u64) {
-        let abs_change = if self.last_price > 0.0 { (price - self.last_price).abs() } else { 0.0 };
-        self.last_price = price;
+    pub fn add_tick(&mut self, price: f64, qty: f64, is_buyer_maker: bool, ts: u64, abs_change: f64) {
         self.cumulative_path += abs_change;
 
-        // 1. Add to Volume Profile (14400s lookback)
+        // 1. Add to Volume Profile
         self.profile_ticks.push_back((price, qty, ts, abs_change));
         self.profile_vol_sum += qty;
         
@@ -74,16 +75,16 @@ impl EngineState {
             if idx > self.global_max_idx { self.global_max_idx = idx; }
         }
 
-        // 2. Add to CVD/VWAP (14400s lookback)
+        // 2. Add to CVD/VWAP
         self.cvd_ticks.push_back((price, qty, ts, is_buyer_maker));
         let tick_cvd = if is_buyer_maker { -qty } else { qty };
         self.cvd += tick_cvd;
         self.vol_price_sum += price * qty;
         self.vol_sum += qty;
         
-        // 3. Remove old ticks (14400s)
+        // 3. Remove old ticks (Volume Profile)
         while let Some(&(f_price, f_qty, f_ts, f_abs_change)) = self.profile_ticks.front() {
-            if ts.saturating_sub(f_ts) > 14400_000 {
+            if ts.saturating_sub(f_ts) > self.lookback_ms {
                 let f_idx = Self::price_to_index(f_price);
                 if f_idx < self.histogram.len() {
                     self.histogram[f_idx] -= f_qty;
@@ -99,9 +100,9 @@ impl EngineState {
             }
         }
         
-        // 4. Remove old ticks CVD (14400s)
+        // 4. Remove old ticks (CVD/VWAP)
         while let Some(&(f_price, f_qty, f_ts, f_maker)) = self.cvd_ticks.front() {
-            if ts.saturating_sub(f_ts) > 14400_000 {
+            if ts.saturating_sub(f_ts) > self.lookback_ms {
                 let f_cvd = if f_maker { -f_qty } else { f_qty };
                 self.cvd -= f_cvd;
                 self.vol_price_sum -= f_price * f_qty;
@@ -124,7 +125,7 @@ impl EngineState {
         let min_idx = self.global_min_idx;
         let max_idx = self.global_max_idx;
         
-        if min_idx == 2_000_000 { return (0.0, 0.0, 0.0); }
+        if min_idx >= 2_000_000 { return (0.0, 0.0, 0.0); }
         
         for i in min_idx..=max_idx {
             if self.histogram[i] > max_vol {
@@ -168,21 +169,16 @@ impl EngineState {
         
         (poc_price, Self::index_to_price(val_idx.min(vah_idx)), Self::index_to_price(val_idx.max(vah_idx)))
     }
-
+    
     pub fn get_vaw(&self) -> f64 {
         let (poc, val, vah) = self.get_val_vah();
-        if poc > 0.0 {
-            ((vah - val) / poc) * 100.0
-        } else {
-            0.0
-        }
+        if poc > 0.0 { ((vah - val) / poc) * 100.0 } else { 0.0 }
     }
 
     pub fn get_chop(&self) -> f64 {
         let n = self.profile_ticks.len() as f64;
-        if n < 10.0 { return 50.0; } // Default neutral if not enough data
+        if n < 10.0 { return 50.0; }
         
-        // Find true min and max by scanning histogram inwards
         let mut true_min_idx = self.global_min_idx;
         while true_min_idx <= self.global_max_idx && self.histogram[true_min_idx] == 0.0 {
             true_min_idx += 1;
@@ -205,13 +201,7 @@ impl EngineState {
         }
     }
 
-    pub fn update_htf_cache(&mut self) {
-        let current_ts = if let Some(last_tick) = self.profile_ticks.back() {
-            last_tick.2
-        } else {
-            0
-        };
-        
+    pub fn update_htf_cache(&mut self, current_ts: u64) {
         if current_ts > self.last_htf_ts + 60_000 || self.last_htf_ts == 0 {
             let (poc, val, vah) = self.get_val_vah();
             self.cached_poc = poc;
@@ -220,16 +210,43 @@ impl EngineState {
             self.cached_vaw = if poc > 0.0 { ((vah - val) / poc) * 100.0 } else { 0.0 };
             self.cached_chop = self.get_chop();
             
-            // Shrink global indices to prevent unbounded O(N) growth
             while self.global_min_idx < self.global_max_idx && self.histogram[self.global_min_idx] == 0.0 {
                 self.global_min_idx += 1;
             }
             while self.global_max_idx > self.global_min_idx && self.histogram[self.global_max_idx] == 0.0 {
+                if self.global_max_idx == 0 { break; }
                 self.global_max_idx -= 1;
             }
             
             self.last_htf_ts = current_ts;
         }
+    }
+}
+
+pub struct EngineState {
+    pub tf_15m: TimeframeState,
+    pub tf_1h: TimeframeState,
+    pub tf_4h: TimeframeState,
+    pub last_price: f64,
+}
+
+impl EngineState {
+    pub fn new() -> Self {
+        Self {
+            tf_15m: TimeframeState::new(900_000),   // 15 minutes
+            tf_1h: TimeframeState::new(3600_000),   // 1 hour
+            tf_4h: TimeframeState::new(14400_000),  // 4 hours
+            last_price: 0.0,
+        }
+    }
+
+    pub fn add_tick(&mut self, price: f64, qty: f64, is_buyer_maker: bool, ts: u64) {
+        let abs_change = if self.last_price > 0.0 { (price - self.last_price).abs() } else { 0.0 };
+        self.last_price = price;
+
+        self.tf_15m.add_tick(price, qty, is_buyer_maker, ts, abs_change);
+        self.tf_1h.add_tick(price, qty, is_buyer_maker, ts, abs_change);
+        self.tf_4h.add_tick(price, qty, is_buyer_maker, ts, abs_change);
     }
 }
 
@@ -258,24 +275,35 @@ pub extern "C" fn add_tick(
 #[no_mangle]
 pub extern "C" fn get_metrics(
     engine: *mut EngineState,
-    out_metrics: *mut f64 // Expects array of 8 f64: [vwap, cvd, poc, val, vah, vaw, chop, last_price]
+    out_metrics: *mut f64 // Expects array of 24 f64: 3 x [vwap, cvd, poc, val, vah, vaw, chop, last_price]
 ) {
     if engine.is_null() || out_metrics.is_null() { return; }
     let engine = unsafe { &mut *engine };
     
-    // Update the cache if 60 seconds have passed since the last HTF calculation
-    engine.update_htf_cache();
+    let current_ts = if let Some(last_tick) = engine.tf_4h.profile_ticks.back() {
+        last_tick.2
+    } else {
+        0
+    };
+
+    engine.tf_15m.update_htf_cache(current_ts);
+    engine.tf_1h.update_htf_cache(current_ts);
+    engine.tf_4h.update_htf_cache(current_ts);
     
-    let out = unsafe { std::slice::from_raw_parts_mut(out_metrics, 8) };
+    let out = unsafe { std::slice::from_raw_parts_mut(out_metrics, 24) };
     
-    out[0] = if engine.vol_sum > 0.0 { engine.vol_price_sum / engine.vol_sum } else { 0.0 };
-    out[1] = engine.cvd;
-    out[2] = engine.cached_poc;
-    out[3] = engine.cached_val;
-    out[4] = engine.cached_vah;
-    out[5] = engine.cached_vaw;
-    out[6] = engine.cached_chop;
-    out[7] = engine.last_price;
+    let tfs = [&engine.tf_15m, &engine.tf_1h, &engine.tf_4h];
+    for (i, tf) in tfs.iter().enumerate() {
+        let offset = i * 8;
+        out[offset] = if tf.vol_sum > 0.0 { tf.vol_price_sum / tf.vol_sum } else { 0.0 };
+        out[offset + 1] = tf.cvd;
+        out[offset + 2] = tf.cached_poc;
+        out[offset + 3] = tf.cached_val;
+        out[offset + 4] = tf.cached_vah;
+        out[offset + 5] = tf.cached_vaw;
+        out[offset + 6] = tf.cached_chop;
+        out[offset + 7] = engine.last_price;
+    }
 }
 
 #[no_mangle]

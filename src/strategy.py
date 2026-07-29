@@ -63,6 +63,7 @@ class StrategyEngine:
         self._load_params()
         
         m_15m = metrics.get('15m', {})
+        funding_rate = metrics.get('funding_rate', 0.0)
         
         current_price = m_15m.get('current_price', 0)
         cvd = m_15m.get('cvd', 0)
@@ -96,8 +97,14 @@ class StrategyEngine:
         
         # Apply Soft Filter
         # Jika Kronos prediksi berlawanan arah dengan strategi, perketat syarat masuk 2x lipat
+        # [AUDIT P3] Funding Rate filter: penalty if against the crowd
         long_penalty = 2.0 if kronos_trend == "DOWN" else 1.0
         short_penalty = 2.0 if kronos_trend == "UP" else 1.0
+        
+        if funding_rate > 0.0001: # High positive funding (too many longs) -> penalty for LONG
+            long_penalty *= 1.5
+        elif funding_rate < -0.0001: # High negative funding (too many shorts) -> penalty for SHORT
+            short_penalty *= 1.5
         
         cvd_thresh_long = cvd_thresh * long_penalty
         imb_thresh_long = imb_thresh * long_penalty

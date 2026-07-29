@@ -69,8 +69,7 @@ class OrderFlowEngine:
             self.lib.add_tick(self.engine_ptr, price, qty, is_buyer_maker, ts)
             
         except Exception as e:
-            log.error(f"Error processing aggTrade in Rust Engine: {e}")
-
+            log.error(f"Error processing aggTrade in Rust Engine: {e} | Message: {msg}")
     def process_depth(self, msg):
         """
         Processes Binance depth WebSocket message.
@@ -88,29 +87,26 @@ class OrderFlowEngine:
         Rust engine secara native mengelola lookback 4 jam (14400 detik).
         """
         metrics = {
-            "cvd": 0.0,
-            "vwap": 0.0,
-            "imbalance": 0.0,
-            "current_price": 0.0,
-            "buy_vol": 0.0,
-            "sell_vol": 0.0,
-            "poc": 0.0,
-            "vah": 0.0,
-            "val": 0.0
+            "15m": {"cvd": 0.0, "vwap": 0.0, "imbalance": 0.0, "current_price": 0.0, "poc": 0.0, "vah": 0.0, "val": 0.0, "vaw": 0.0, "chop": 50.0},
+            "1h":  {"cvd": 0.0, "vwap": 0.0, "imbalance": 0.0, "current_price": 0.0, "poc": 0.0, "vah": 0.0, "val": 0.0, "vaw": 0.0, "chop": 50.0},
+            "4h":  {"cvd": 0.0, "vwap": 0.0, "imbalance": 0.0, "current_price": 0.0, "poc": 0.0, "vah": 0.0, "val": 0.0, "vaw": 0.0, "chop": 50.0}
         }
         
         # 1. Fetch data from Rust O(1) Array
-        out_array = (ctypes.c_double * 8)()
+        out_array = (ctypes.c_double * 24)()
         self.lib.get_metrics(self.engine_ptr, out_array)
         
-        metrics['vwap'] = out_array[0]
-        metrics['cvd'] = out_array[1]
-        metrics['poc'] = out_array[2]
-        metrics['val'] = out_array[3]
-        metrics['vah'] = out_array[4]
-        metrics['vaw'] = out_array[5]
-        metrics['chop'] = out_array[6]
-        metrics['current_price'] = out_array[7]
+        tfs = ["15m", "1h", "4h"]
+        for i, tf in enumerate(tfs):
+            offset = i * 8
+            metrics[tf]['vwap'] = out_array[offset + 0]
+            metrics[tf]['cvd'] = out_array[offset + 1]
+            metrics[tf]['poc'] = out_array[offset + 2]
+            metrics[tf]['val'] = out_array[offset + 3]
+            metrics[tf]['vah'] = out_array[offset + 4]
+            metrics[tf]['vaw'] = out_array[offset + 5]
+            metrics[tf]['chop'] = out_array[offset + 6]
+            metrics[tf]['current_price'] = out_array[offset + 7]
             
         # 2. Calculate Order Book Imbalance (Top 5 levels)
         if self.orderbook['bids'] and self.orderbook['asks']:
@@ -118,6 +114,8 @@ class OrderFlowEngine:
             ask_vol = sum(vol for _, vol in self.orderbook['asks'][:5])
             total_depth_vol = bid_vol + ask_vol
             if total_depth_vol > 0:
-                metrics['imbalance'] = (bid_vol - ask_vol) / total_depth_vol
+                imb = (bid_vol - ask_vol) / total_depth_vol
+                for tf in tfs:
+                    metrics[tf]['imbalance'] = imb
                 
         return metrics
