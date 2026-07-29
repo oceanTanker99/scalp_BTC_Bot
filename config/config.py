@@ -20,7 +20,7 @@ TRADE_END_HOUR_UTC = 24    # 24:00 UTC (Tutup 24 Jam)
 
 # Risk Management
 MAX_DAILY_DRAWDOWN_PCT = 0.08  # Max 8% drawdown harian
-TRADE_RISK_PCT = 0.01  # Risk 1% per trade (audit: 5% terlalu agresif untuk leverage tinggi)
+TRADE_RISK_PCT = 0.05  # Risk 5% per trade
 LEVERAGE = 20  # Diturunkan dari 60x (audit: risiko likuidasi terlalu tinggi)
 
 # TP/SL Targets (Risk:Reward Ratio)

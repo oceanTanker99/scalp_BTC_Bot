@@ -280,6 +280,17 @@ class LiveTrader:
         side = 'BUY' if signal == 'LONG' else 'SELL'
         sl_side = 'SELL' if signal == 'LONG' else 'BUY'
 
+        # [AUDIT P3] Fee-awareness: pastikan expected profit > biaya trading
+        # Binance Futures fee: 0.02% maker per side = 0.04% round-trip
+        ROUND_TRIP_FEE_PCT = 0.0004  # 0.04%
+        expected_tp_distance = sl_pct * RRR_TP1  # Jarak TP sebagai fraksi harga
+        if expected_tp_distance <= ROUND_TRIP_FEE_PCT * 1.5:  # Profit harus > 1.5x fee
+            log.warning(
+                f"⚠️ Expected TP ({expected_tp_distance*100:.3f}%) terlalu kecil vs fee "
+                f"({ROUND_TRIP_FEE_PCT*100:.3f}%). Trade tidak profitable, dibatalkan."
+            )
+            return None, None, None
+
         # Hitung level SL dan TP
         if signal == 'LONG':
             sl_price = round(current_price * (1 - sl_pct), 1)

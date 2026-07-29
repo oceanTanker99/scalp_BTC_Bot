@@ -71,10 +71,23 @@ class StrategyEngine:
         poc = m_15m.get('poc', 0)
         vah = m_15m.get('vah', 0)
         val = m_15m.get('val', 0)
+        vaw = m_15m.get('vaw', 0)
         
         if current_price == 0 or vwap == 0:
             return "NEUTRAL", 0.0, 0.0
             
+        # [AUDIT P2] Regime Detection via Value Area Width (VAW)
+        # VAW sempit = market squeeze/ranging → JANGAN TRADE (potensi breakout palsu)
+        # VAW terlalu lebar = market terlalu liar → KURANGI eksposur
+        if vaw > 0 and vwap > 0:
+            vaw_pct = vaw / vwap * 100  # VAW sebagai persentase dari VWAP
+            if vaw_pct < 0.15:  # Squeeze: VA terlalu sempit (<0.15%)
+                log.info(f"🔒 REGIME: Market Squeeze terdeteksi (VAW: {vaw_pct:.3f}%). Sinyal diabaikan.")
+                return "NEUTRAL", current_price, 0.0
+            if vaw_pct > 2.0:  # Chaos: VA terlalu lebar (>2%)
+                log.info(f"🌪️ REGIME: Market terlalu volatile (VAW: {vaw_pct:.3f}%). Sinyal diabaikan.")
+                return "NEUTRAL", current_price, 0.0
+        
         cvd_thresh = self.current_params.get("cvd_divergence_threshold", 5.0)
         imb_thresh = self.current_params.get("imbalance_threshold", 0.3)
         vwap_pct = self.current_params.get("vwap_distance_pct", 0.1)

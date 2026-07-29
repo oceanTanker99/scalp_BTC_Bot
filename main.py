@@ -132,11 +132,16 @@ class ScalpBot:
         if signal in ['LONG', 'SHORT']:
             valid_signal = True
             
-            # Filter 1: NY Session Kill Zone (13:00 - 15:59 UTC)
+            # Filter 1: Kill Zone — Jam-jam volatilitas tinggi yang berbahaya untuk Mean-Reversion
             dt_utc = datetime.now(timezone.utc)
-            if 13 <= dt_utc.hour <= 15:
+            # NY Kill Zone: 13:00-16:59 UTC (termasuk penutupan London overlap)
+            # Asia Kill Zone: 00:00-01:59 UTC (potensi flash crash & liquidation cascade)
+            is_ny_kill = 13 <= dt_utc.hour <= 16
+            is_asia_kill = 0 <= dt_utc.hour <= 1
+            if is_ny_kill or is_asia_kill:
                 valid_signal = False
-                log.info(f"🛡️ Sinyal {signal} diabaikan (NY Kill Zone: {dt_utc.hour:02d}:00 UTC).")
+                zone_name = "NY" if is_ny_kill else "Asia"
+                log.info(f"🛡️ Sinyal {signal} diabaikan ({zone_name} Kill Zone: {dt_utc.hour:02d}:00 UTC).")
             
             # Filter 2: VWAP Distance (> 0.45%) - REMOVED
             # Strategi sudah memiliki filter jarak VWAP dinamis (vwap_pct) dari AI tuning.

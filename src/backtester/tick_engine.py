@@ -81,9 +81,13 @@ class TickBacktester:
                                 # --- OPTIMIZATION FILTERS ---
                                 valid_signal = True
                                 
-                                # Filter 1: NY Session Kill Zone (13:00 - 15:59 UTC)
+                                # Filter 1: Kill Zone — Jam-jam volatilitas tinggi yang berbahaya untuk Mean-Reversion
                                 dt_utc = datetime.utcfromtimestamp(ts_sec)
-                                if 13 <= dt_utc.hour <= 15:
+                                # NY Kill Zone: 13:00-16:59 UTC (termasuk penutupan London overlap)
+                                # Asia Kill Zone: 00:00-01:59 UTC (potensi flash crash & liquidation cascade)
+                                is_ny_kill = 13 <= dt_utc.hour <= 16
+                                is_asia_kill = 0 <= dt_utc.hour <= 1
+                                if is_ny_kill or is_asia_kill:
                                     valid_signal = False
                                 
                                 # Filter 2: VWAP Distance (> 0.45%)
