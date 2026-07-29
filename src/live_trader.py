@@ -308,9 +308,9 @@ class LiveTrader:
                 # Ambil Best Bid/Ask terbaru agar Post-Only (GTX) pasti diterima
                 ob_ticker = await self.client.futures_orderbook_ticker(symbol=SYMBOL)
                 if signal == 'LONG':
-                    limit_price = round(float(ob_ticker['bidPrice']) * (1 + CHASE_OFFSET_PCT * attempt), 1)
+                    limit_price = round(float(ob_ticker['bidPrice']), 1)
                 else:
-                    limit_price = round(float(ob_ticker['askPrice']) * (1 - CHASE_OFFSET_PCT * attempt), 1)
+                    limit_price = round(float(ob_ticker['askPrice']), 1)
 
                 log.info(
                     f"📤 Percobaan {attempt}/{CHASE_MAX_ATTEMPTS} — "
