@@ -84,20 +84,21 @@ class TelegramNotifier:
                                     await self._send_to_chat(chat_id, "🏓 <b>PONG!</b> Bot Scalp BTC sedang online.")
                                 elif text == "/market":
                                     metrics = engine.get_metrics()
-                                    price = metrics.get('current_price', metrics.get('vwap', 0))
+                                    tf_metrics = metrics.get('4h', {})
+                                    price = tf_metrics.get('current_price', tf_metrics.get('vwap', 0))
                                     
                                     msg_market = (
                                         f"📈 <b>KONDISI PASAR (Order Flow)</b>\n"
                                         f"━━━━━━━━━━━━━━━━\n"
                                         f"💰 Harga : <code>{price:,.1f}</code>\n"
-                                        f"⚖️ VWAP  : <code>{metrics.get('vwap', 0):,.1f}</code>\n"
-                                        f"📊 CVD   : <code>{metrics.get('cvd', 0):,.1f}</code> BTC\n"
-                                        f"🧱 Imbal : <code>{metrics.get('imbalance', 0):+.2f}</code>\n"
+                                        f"⚖️ VWAP  : <code>{tf_metrics.get('vwap', 0):,.1f}</code>\n"
+                                        f"📊 CVD   : <code>{tf_metrics.get('cvd', 0):,.1f}</code> BTC\n"
+                                        f"🧱 Imbal : <code>{tf_metrics.get('imbalance', 0):+.2f}</code>\n"
                                         f"━━━━━━━━━━━━━━━━\n"
                                         f"📌 <b>Volume Profile (4 Jam):</b>\n"
-                                        f"🔼 VAH : <code>{metrics.get('vah', 0):,.1f}</code>\n"
-                                        f"▶️ POC : <code>{metrics.get('poc', 0):,.1f}</code>\n"
-                                        f"🔽 VAL : <code>{metrics.get('val', 0):,.1f}</code>\n"
+                                        f"🔼 VAH : <code>{tf_metrics.get('vah', 0):,.1f}</code>\n"
+                                        f"▶️ POC : <code>{tf_metrics.get('poc', 0):,.1f}</code>\n"
+                                        f"🔽 VAL : <code>{tf_metrics.get('val', 0):,.1f}</code>\n"
                                     )
                                     await self._send_to_chat(chat_id, msg_market)
                                 elif text == "/ai":

@@ -73,9 +73,13 @@ class TickBacktester:
                             
                             # Mock imbalance because we lack depth data
                             # We force it to follow CVD direction so it bypasses the strategy check
-                            metrics['imbalance'] = 1.0 if metrics.get('cvd', 0) > 0 else -1.0
+                            cvd_15m = metrics.get('15m', {}).get('cvd', 0)
+                            imb = 1.0 if cvd_15m > 0 else -1.0
+                            for tf in ['15m', '1h', '4h']:
+                                if tf in metrics:
+                                    metrics[tf]['imbalance'] = imb
                             
-                            signal, eval_price, sl_dist = self.strategy.analyze_order_flow({"15m": metrics})
+                            signal, eval_price, sl_dist = self.strategy.analyze_order_flow(metrics)
                             
                             if signal in ["LONG", "SHORT"]:
                                 # --- OPTIMIZATION FILTERS ---

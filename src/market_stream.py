@@ -69,7 +69,7 @@ class MarketStream:
                 self.engine.process_agg_trade(msg)
                 tick_count += 1
                 if tick_count % 100 == 0:
-                    log.info(f"Received {tick_count} ticks... VWAP: {self.engine.get_metrics()['vwap']:.2f}")
+                    log.info(f"Received {tick_count} ticks... VWAP: {self.engine.get_metrics()['15m']['vwap']:.2f}")
 
     async def _depth_stream(self):
         log.info("Memulai depth stream (L2 Imbalance)...")

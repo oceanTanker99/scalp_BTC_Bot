@@ -58,7 +58,7 @@ class AITuner:
         while self._running:
             try:
                 # Ambil data makro 4 jam terakhir
-                metrics_4h = self.engine.get_metrics()
+                metrics_4h = self.engine.get_metrics().get('4h', {})
                 
                 # Cek jika data sudah cukup lewat ketersediaan VWAP dan POC
                 if metrics_4h.get('vwap', 0) == 0 or metrics_4h.get('poc', 0) == 0:
