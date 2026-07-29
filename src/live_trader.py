@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 # --- Konfigurasi Chasing Limit Order ---
 CHASE_MAX_ATTEMPTS = 3       # Maksimum percobaan re-place order
-CHASE_WAIT_SECONDS = 5       # Tunggu per percobaan sebelum cek status
+CHASE_WAIT_SECONDS = 2       # Tunggu per percobaan sebelum cek status
 CHASE_OFFSET_PCT = 0.0003    # Offset harga 0.03% ke arah pasar setiap percobaan
 
 
@@ -65,6 +65,32 @@ class LiveTrader:
                 json.dump(state, f)
         except Exception as e:
             log.error(f"Gagal menyimpan state kill switch: {e}")
+
+    async def _get_all_open_orders(self):
+        orders = []
+        try:
+            std = await self.client.futures_get_open_orders(symbol=SYMBOL)
+            orders.extend(std)
+        except Exception:
+            pass
+        try:
+            algo = await self.client._request_futures_api('get', 'openAlgoOrders', signed=True, data={'symbol': SYMBOL})
+            if isinstance(algo, list):
+                for ao in algo:
+                    ao['type'] = ao.get('orderType', ao.get('type'))
+                    ao['stopPrice'] = ao.get('triggerPrice', ao.get('stopPrice'))
+                    ao['orderId'] = ao.get('algoId', ao.get('orderId'))
+                    ao['is_algo'] = True
+                    orders.append(ao)
+        except Exception:
+            pass
+        return orders
+
+    async def _cancel_order(self, order):
+        if order.get('is_algo'):
+            await self.client._request_futures_api('delete', 'algoOrder', signed=True, data={'symbol': SYMBOL, 'algoId': order['orderId']})
+        else:
+            await self.client.futures_cancel_order(symbol=SYMBOL, orderId=order['orderId'])
 
     async def sync_time(self):
         # Sync time with Binance Server to prevent Timestamp APIError (-1021)
@@ -154,7 +180,7 @@ class LiveTrader:
                         f"Lev  : {leverage}x\n\n"
                     )
 
-            orders = await self.client.futures_get_open_orders(symbol=SYMBOL)
+            orders = await self._get_all_open_orders()
             if orders:
                 msg += f"📝 <b>PROTEKSI (SL/TP)</b>\n━━━━━━━━━━━━━━━━\n"
                 sl_found = False
@@ -329,24 +355,24 @@ class LiveTrader:
             log.info("🛡️ Memasang perlindungan Stop Loss dan Take Profit...")
 
             # Stop Loss
-            await self.client.futures_create_order(
-                symbol=SYMBOL,
-                side=sl_side,
-                type='STOP_MARKET',
-                stopPrice=sl_price,
-                closePosition=True,
-                timeInForce='GTE_GTC'
-            )
+            await self.client._request_futures_api('post', 'algoOrder', signed=True, data={
+                'symbol': SYMBOL,
+                'side': sl_side,
+                'type': 'STOP_MARKET',
+                'algoType': 'CONDITIONAL',
+                'triggerPrice': str(sl_price),
+                'closePosition': 'TRUE'
+            })
 
             # Take Profit
-            await self.client.futures_create_order(
-                symbol=SYMBOL,
-                side=sl_side,
-                type='TAKE_PROFIT_MARKET',
-                stopPrice=tp_price,
-                closePosition=True,
-                timeInForce='GTE_GTC'
-            )
+            await self.client._request_futures_api('post', 'algoOrder', signed=True, data={
+                'symbol': SYMBOL,
+                'side': sl_side,
+                'type': 'TAKE_PROFIT_MARKET',
+                'algoType': 'CONDITIONAL',
+                'triggerPrice': str(tp_price),
+                'closePosition': 'TRUE'
+            })
 
             log.info(
                 f"✅ Trade berhasil! Entry: {actual_entry}, SL: {sl_price}, TP: {tp_price}"
@@ -381,7 +407,7 @@ class LiveTrader:
                 pnl_pct = (entry_price - mark_price) / entry_price
 
             if pnl_pct >= BREAK_EVEN_TRIGGER_PCT:
-                orders = await self.client.futures_get_open_orders(symbol=SYMBOL)
+                orders = await self._get_all_open_orders()
                 sl_orders = [o for o in orders if o['type'] == 'STOP_MARKET']
                 if not sl_orders:
                     return
@@ -389,26 +415,29 @@ class LiveTrader:
                 sl_order = sl_orders[0]
                 current_sl = float(sl_order['stopPrice'])
 
+                target_sl = round(entry_price, 1)
+
                 needs_move = False
-                if direction == "LONG" and current_sl < entry_price:
+                if direction == "LONG" and current_sl < target_sl:
                     needs_move = True
-                elif direction == "SHORT" and current_sl > entry_price:
+                elif direction == "SHORT" and current_sl > target_sl:
                     needs_move = True
 
                 if needs_move:
-                    log.info(f"🛡️ Menggeser SL ke Break Even ({entry_price})...")
-                    try:
-                        await self.client.futures_cancel_order(symbol=SYMBOL, orderId=sl_order['orderId'])
-                    except Exception as e:
-                        log.error(f"Gagal membatalkan SL lama: {e}")
-                        return
+                    if len(sl_orders) > 0:
+                        for sl_order in sl_orders:
+                            try:
+                                await self._cancel_order(sl_order)
+                            except Exception as e:
+                                log.error(f"Gagal membatalkan SL lama: {e}")
+                                return
                     
                     side = "SELL" if direction == "LONG" else "BUY"
                     try:
-                        await self.client.futures_create_order(
-                            symbol=SYMBOL, side=side, type="STOP_MARKET",
-                            stopPrice=round(entry_price, 1), closePosition="true", timeInForce="GTE_GTC"
-                        )
+                        await self.client._request_futures_api('post', 'algoOrder', signed=True, data={
+                            'symbol': SYMBOL, 'side': side, 'type': 'STOP_MARKET', 'algoType': 'CONDITIONAL',
+                            'triggerPrice': str(round(entry_price, 1)), 'closePosition': 'TRUE'
+                        })
                         log.info(f"🛡️ Trailing Stop aktif! SL dipindah ke {round(entry_price, 1)}")
                         if self._notifier:
                             await self._notifier.notify_info(
@@ -420,10 +449,10 @@ class LiveTrader:
                         log.error(f"🚨 FATAL: Gagal membuat SL baru di {entry_price}: {e}. Mencoba mengembalikan SL lama...")
                         try:
                             # Coba pasang ulang SL lama sebagai jaring pengaman terakhir
-                            await self.client.futures_create_order(
-                                symbol=SYMBOL, side=side, type="STOP_MARKET",
-                                stopPrice=current_sl, closePosition="true", timeInForce="GTE_GTC"
-                            )
+                            await self.client._request_futures_api('post', 'algoOrder', signed=True, data={
+                                'symbol': SYMBOL, 'side': side, 'type': 'STOP_MARKET', 'algoType': 'CONDITIONAL',
+                                'triggerPrice': str(current_sl), 'closePosition': 'TRUE'
+                            })
                             log.info("🛡️ SL lama berhasil dipulihkan.")
                         except Exception as e2:
                             log.error(f"🚨🚨 KRITIKAL: Gagal memulihkan SL lama: {e2}. Menutup posisi darurat...")
@@ -466,7 +495,7 @@ class LiveTrader:
             sl_side = "SELL" if direction == "LONG" else "BUY"
 
             # Cek apakah sudah ada SL/TP
-            orders = await self.client.futures_get_open_orders(symbol=SYMBOL)
+            orders = await self._get_all_open_orders()
             has_sl = any(o['type'] == 'STOP_MARKET' for o in orders)
             has_tp = any(o['type'] == 'TAKE_PROFIT_MARKET' for o in orders)
 
@@ -483,10 +512,10 @@ class LiveTrader:
                 else:
                     sl_price = round(entry_price * (1 + emergency_sl_pct), 1)
 
-                await self.client.futures_create_order(
-                    symbol=SYMBOL, side=sl_side, type='STOP_MARKET',
-                    stopPrice=sl_price, closePosition=True, timeInForce='GTE_GTC'
-                )
+                await self.client._request_futures_api('post', 'algoOrder', signed=True, data={
+                    'symbol': SYMBOL, 'side': sl_side, 'type': 'STOP_MARKET', 'algoType': 'CONDITIONAL',
+                    'triggerPrice': str(sl_price), 'closePosition': 'TRUE'
+                })
                 log.warning(f"🚨 RECONCILIATION: SL darurat dipasang @ {sl_price}")
                 if self._notifier:
                     await self._notifier.notify_error(
@@ -500,10 +529,10 @@ class LiveTrader:
                 else:
                     tp_price = round(entry_price * (1 - emergency_tp_pct), 1)
 
-                await self.client.futures_create_order(
-                    symbol=SYMBOL, side=sl_side, type='TAKE_PROFIT_MARKET',
-                    stopPrice=tp_price, closePosition=True, timeInForce='GTE_GTC'
-                )
+                await self.client._request_futures_api('post', 'algoOrder', signed=True, data={
+                    'symbol': SYMBOL, 'side': sl_side, 'type': 'TAKE_PROFIT_MARKET', 'algoType': 'CONDITIONAL',
+                    'triggerPrice': str(tp_price), 'closePosition': 'TRUE'
+                })
                 log.warning(f"🚨 RECONCILIATION: TP darurat dipasang @ {tp_price}")
 
         except Exception as e:
