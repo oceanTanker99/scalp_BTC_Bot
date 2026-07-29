@@ -81,7 +81,7 @@ class StrategyEngine:
         # VAW sempit = market squeeze/ranging → JANGAN TRADE (potensi breakout palsu)
         # VAW terlalu lebar = market terlalu liar → KURANGI eksposur
         if vaw > 0 and vwap > 0:
-            vaw_pct = vaw / vwap * 100  # VAW sebagai persentase dari VWAP
+            vaw_pct = vaw  # VAW is already a percentage from Rust
             if vaw_pct < 0.15:  # Squeeze: VA terlalu sempit (<0.15%)
                 log.info(f"🔒 REGIME: Market Squeeze terdeteksi (VAW: {vaw_pct:.3f}%). Sinyal diabaikan.")
                 return "NEUTRAL", current_price, 0.0
