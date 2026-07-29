@@ -268,6 +268,15 @@ class LiveTrader:
             log.warning(f"⚠️ Qty terlalu kecil ({qty:.6f} BTC < 0.001 minimum). Trade dibatalkan demi menjaga risk management.")
             return None, None, None
 
+        # [AUDIT FIX] Validasi margin sebelum eksekusi
+        required_margin = (qty * current_price) / LEVERAGE
+        if required_margin > balance * 0.9:  # Sisakan 10% buffer margin
+            log.warning(
+                f"⚠️ Margin tidak cukup! Required: {required_margin:.2f} USDT, "
+                f"Available: {balance:.2f} USDT. Trade dibatalkan."
+            )
+            return None, None, None
+
         side = 'BUY' if signal == 'LONG' else 'SELL'
         sl_side = 'SELL' if signal == 'LONG' else 'BUY'
 
@@ -288,9 +297,9 @@ class LiveTrader:
                 # Ambil Best Bid/Ask terbaru agar Post-Only (GTX) pasti diterima
                 ob_ticker = await self.client.futures_orderbook_ticker(symbol=SYMBOL)
                 if signal == 'LONG':
-                    limit_price = float(ob_ticker['bidPrice'])
+                    limit_price = round(float(ob_ticker['bidPrice']) * (1 + CHASE_OFFSET_PCT * attempt), 1)
                 else:
-                    limit_price = float(ob_ticker['askPrice'])
+                    limit_price = round(float(ob_ticker['askPrice']) * (1 - CHASE_OFFSET_PCT * attempt), 1)
 
                 log.info(
                     f"📤 Percobaan {attempt}/{CHASE_MAX_ATTEMPTS} — "

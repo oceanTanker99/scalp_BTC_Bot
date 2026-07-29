@@ -19,9 +19,9 @@ TRADE_START_HOUR_UTC = 0   # 00:00 UTC (Buka 24 Jam)
 TRADE_END_HOUR_UTC = 24    # 24:00 UTC (Tutup 24 Jam)
 
 # Risk Management
-MAX_DAILY_DRAWDOWN_PCT = 0.20
-TRADE_RISK_PCT = 0.05  # Risk 5% per trade
-LEVERAGE = 60
+MAX_DAILY_DRAWDOWN_PCT = 0.08  # Max 8% drawdown harian
+TRADE_RISK_PCT = 0.01  # Risk 1% per trade (audit: 5% terlalu agresif untuk leverage tinggi)
+LEVERAGE = 20  # Diturunkan dari 60x (audit: risiko likuidasi terlalu tinggi)
 
 # TP/SL Targets (Risk:Reward Ratio)
 RRR_TP1 = 2.0 # Take Profit (1:2 RRR)x SL distance
@@ -58,7 +58,7 @@ VOLUME_SPIKE_MULTIPLIER = 1.5  # Volume harus 1.5x rata-rata untuk bonus skor
 MIN_SIGNAL_SCORE = 3
 
 # Trailing Stop / Break Even
-BREAK_EVEN_TRIGGER_PCT = 0.005  # Pindah SL ke titik impas jika profit > 0.5%
+BREAK_EVEN_TRIGGER_PCT = 0.003  # Pindah SL ke titik impas jika profit > 0.3% (leverage lebih rendah = trigger lebih cepat)
 
 # Cooldown pasca trade (dalam jumlah candle 5m, 1 candle = 5 menit)
 COOLDOWN_CANDLES = 3  # Jeda 15 menit setelah trade selesai

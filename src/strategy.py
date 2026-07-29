@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import logging
 
 log = logging.getLogger(__name__)
@@ -20,9 +21,15 @@ class StrategyEngine:
         # In-memory cache for Kronos
         self.kronos_prediction = {"trend": "SIDEWAYS"}
         self.last_kronos_load_time = 0
+        self._last_check_time = 0
 
     def _load_params(self):
-        # Only reload if file has actually been modified since last read
+        # Throttle: hanya cek file maksimal setiap 10 detik untuk menghindari blocking I/O
+        now = time.time()
+        if now - self._last_check_time < 10:
+            return
+        self._last_check_time = now
+        
         try:
             if os.path.exists(self.params_file):
                 mtime = os.path.getmtime(self.params_file)
@@ -100,7 +107,7 @@ class StrategyEngine:
         # 4. Orderbook Imbalance Positif (Bids > Asks)
         if dist_to_vwap < -vwap_pct_long and cvd > cvd_thresh_long and imbalance > imb_thresh_long and is_undervalued:
             log.info(f"[ORDER FLOW] LONG SIGNAL DETECTED | Price: {current_price} | VAL: {val:.1f} | CVD: {cvd:.1f} | Imb: {imbalance:.2f} | Kronos: {kronos_trend}")
-            sl_distance = max(0.005, abs(dist_to_vwap / 100) / 2) # SL at half the VWAP distance
+            sl_distance = max(0.01, abs(dist_to_vwap / 100) / 2)  # Min SL 1% (audit: 0.5% terlalu ketat untuk BTC)
             return "LONG", current_price, sl_distance
             
         # --- SHORT LOGIC ---
@@ -110,7 +117,7 @@ class StrategyEngine:
         # 4. Orderbook Imbalance Negatif (Asks > Bids)
         if dist_to_vwap > vwap_pct_short and cvd < -cvd_thresh_short and imbalance < -imb_thresh_short and is_overvalued:
             log.info(f"[ORDER FLOW] SHORT SIGNAL DETECTED | Price: {current_price} | VAH: {vah:.1f} | CVD: {cvd:.1f} | Imb: {imbalance:.2f} | Kronos: {kronos_trend}")
-            sl_distance = max(0.005, abs(dist_to_vwap / 100) / 2)
+            sl_distance = max(0.01, abs(dist_to_vwap / 100) / 2)  # Min SL 1% (audit: 0.5% terlalu ketat untuk BTC)
             return "SHORT", current_price, sl_distance
             
         return "NEUTRAL", current_price, 0.0

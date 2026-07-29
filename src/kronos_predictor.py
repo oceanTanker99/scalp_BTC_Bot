@@ -63,9 +63,11 @@ class KronosService:
             predicted_trend = "UP"
             predicted_volatility = "HIGH"
         else:
-            # Mocking output
-            predicted_trend = "UP"
-            predicted_volatility = "HIGH"
+            # [AUDIT FIX] Mock mode HARUS mengembalikan SIDEWAYS agar tidak bias
+            # ke satu arah. Sebelumnya selalu "UP" → semua SHORT kena penalti 2x.
+            log.warning("⚠️ KRONOS MOCK MODE AKTIF — Prediksi di-set SIDEWAYS (netral). Install model asli untuk prediksi riil.")
+            predicted_trend = "SIDEWAYS"
+            predicted_volatility = "MEDIUM"
             
         result = {
             "trend": predicted_trend,
@@ -77,7 +79,8 @@ class KronosService:
         with open(CACHE_FILE, 'w') as f:
             json.dump(result, f)
             
-        log.info(f"Updated Kronos Cache: {result}")
+        status_label = "MOCK" if not KRONOS_AVAILABLE else "LIVE"
+        log.info(f"[{status_label}] Updated Kronos Cache: {result}")
 
     def start_loop(self, interval_seconds=60):
         log.info(f"Memulai loop KronosPredictor setiap {interval_seconds} detik.")
